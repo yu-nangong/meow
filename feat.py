@@ -369,7 +369,8 @@ class MeowFeatureGenerator(object):
                 "interval_u": interval_u,
                 "interval_frac_sq": interval_frac_centered * interval_frac_centered,
                 "interval_frac_cu": interval_frac_centered * interval_frac_centered * interval_frac_centered,
-                "interval_u_sq": interval_u * interval_u,
+                # Use a steeper symmetric shape here; abs(x)^2 duplicates x^2 exactly.
+                "interval_u_sq": interval_u * interval_u * interval_u,
             },
             index=df.index,
         )
