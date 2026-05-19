@@ -54,6 +54,10 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "vwad_center_dev",
+            "trade_high_center_gap",
+            "trade_high_skew",
+            "high_vs_trade_high_gap",
             "add_turn_imb",
             "cxl_turn_imb",
             "day_open_gap",
@@ -92,6 +96,10 @@ class MeowFeatureGenerator(object):
             "high_minus_low_rank_cs",
             "trade_buy_high_gap_rank_cs",
             "trade_sell_high_gap_rank_cs",
+            "vwad_center_dev_rank_cs",
+            "trade_high_center_gap_rank_cs",
+            "trade_high_skew_rank_cs",
+            "high_vs_trade_high_gap_rank_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -152,6 +160,10 @@ class MeowFeatureGenerator(object):
         df.loc[:, "high_minus_low"] = (df["high"] - df["low"]) / (df["midpx"] + eps)
         df.loc[:, "trade_buy_high_gap"] = (df["tradeBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
         df.loc[:, "trade_sell_high_gap"] = (df["tradeSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "vwad_center_dev"] = 0.5 * (df["buy_vwad_dev"] + df["sell_vwad_dev"])
+        df.loc[:, "trade_high_center_gap"] = 0.5 * (df["trade_buy_high_gap"] + df["trade_sell_high_gap"])
+        df.loc[:, "trade_high_skew"] = df["trade_buy_high_gap"] - df["trade_sell_high_gap"]
+        df.loc[:, "high_vs_trade_high_gap"] = df["high_gap"] - df["trade_high_center_gap"]
         df.loc[:, "day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         df.loc[:, "range_pos"] = (
             (df["midpx"] - df["low"]) - (df["high"] - df["midpx"])
@@ -231,6 +243,10 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "vwad_center_dev",
+            "trade_high_center_gap",
+            "trade_high_skew",
+            "high_vs_trade_high_gap",
         ]
         rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
         for col in rank_cols:
