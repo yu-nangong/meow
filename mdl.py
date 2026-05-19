@@ -13,7 +13,9 @@ class MeowModel(object):
         self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
         self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
         self.exclude_families = {
-            family.strip() for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",") if family.strip()
+            family.strip()
+            for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs,time_basis").split(",")
+            if family.strip()
         }
         self.exclude_patterns = tuple(
             pattern.strip() for pattern in os.environ.get("MEOW_EXCLUDE_PATTERNS", "").split(",") if pattern.strip()
