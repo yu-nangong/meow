@@ -114,6 +114,22 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
             "high_vs_trade_high_gap_rank_cs",
+            "interval_frac_centered",
+            "interval_u",
+            "trade_imb_rank_cs_x_time",
+            "flow_imb_rank_cs_x_time",
+            "ret1_rank_cs_x_time",
+            "ret6_rank_cs_x_time",
+            "range_pos_rank_cs_x_time",
+            "trade_count_share_rank_cs_x_time",
+            "top_queue_share_imb_rank_cs_x_time",
+            "depth_pressure_slope_rank_cs_x_time",
+            "high_gap_rank_cs_x_time",
+            "trade_imb_rank_cs_x_u",
+            "flow_imb_rank_cs_x_u",
+            "range_pos_rank_cs_x_u",
+            "top_queue_share_imb_rank_cs_x_u",
+            "high_gap_rank_cs_x_u",
         ]
 
     def __init__(self, cacheDir):
@@ -287,6 +303,34 @@ class MeowFeatureGenerator(object):
         rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
         for col in rank_cols:
             df.loc[:, f"{col}_rank_cs"] = rank_df[col] - 0.5
+
+        interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
+        df.loc[:, "interval_frac_centered"] = df["interval"] / interval_max - 0.5
+        df.loc[:, "interval_u"] = np.abs(df["interval_frac_centered"])
+
+        time_interactions = [
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "ret1_rank_cs",
+            "ret6_rank_cs",
+            "range_pos_rank_cs",
+            "trade_count_share_rank_cs",
+            "top_queue_share_imb_rank_cs",
+            "depth_pressure_slope_rank_cs",
+            "high_gap_rank_cs",
+        ]
+        for col in time_interactions:
+            df.loc[:, f"{col}_x_time"] = df[col] * df["interval_frac_centered"]
+
+        u_interactions = [
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "range_pos_rank_cs",
+            "top_queue_share_imb_rank_cs",
+            "high_gap_rank_cs",
+        ]
+        for col in u_interactions:
+            df.loc[:, f"{col}_x_u"] = df[col] * df["interval_u"]
 
         xdf = (
             df[self.mcols + self.featureNames()]
