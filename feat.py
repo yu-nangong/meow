@@ -16,7 +16,7 @@ class MeowFeatureGenerator(object):
     def _nonlinear_time_interactions(cls):
         default = [
             "trade_imb_rank_cs",
-            "high_gap_rank_cs",
+            "range_pos_rank_cs",
             "trade_vwad_gap_rank_cs",
             "trade_high_center_gap_rank_cs",
         ]
