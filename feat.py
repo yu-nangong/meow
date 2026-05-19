@@ -130,6 +130,13 @@ class MeowFeatureGenerator(object):
             "ob_imb4_rank_cs_x_time",
             "ret3_rank_cs_x_time",
             "ret12_resid_rank_cs_x_time",
+            "day_open_gap_rank_cs_x_time",
+            "ret24_rank_cs_x_time",
+            "sell_vwad_dev_rank_cs_x_time",
+            "trade_vwad_gap_rank_cs_x_time",
+            "trade_high_center_gap_rank_cs_x_time",
+            "micro_dev_rank_cs_x_time",
+            "last_mid_dev_rank_cs_x_time",
             "trade_imb_rank_cs_x_u",
             "flow_imb_rank_cs_x_u",
             "range_pos_rank_cs_x_u",
@@ -140,6 +147,13 @@ class MeowFeatureGenerator(object):
             "ob_imb4_rank_cs_x_u",
             "ret3_rank_cs_x_u",
             "high_minus_low_rank_cs_x_u",
+            "day_open_gap_rank_cs_x_u",
+            "ret24_rank_cs_x_u",
+            "sell_vwad_dev_rank_cs_x_u",
+            "trade_vwad_gap_rank_cs_x_u",
+            "trade_high_center_gap_rank_cs_x_u",
+            "micro_dev_rank_cs_x_u",
+            "last_mid_dev_rank_cs_x_u",
         ]
 
     def __init__(self, cacheDir):
@@ -333,6 +347,13 @@ class MeowFeatureGenerator(object):
             "ob_imb4_rank_cs",
             "ret3_rank_cs",
             "ret12_resid_rank_cs",
+            "day_open_gap_rank_cs",
+            "ret24_rank_cs",
+            "sell_vwad_dev_rank_cs",
+            "trade_vwad_gap_rank_cs",
+            "trade_high_center_gap_rank_cs",
+            "micro_dev_rank_cs",
+            "last_mid_dev_rank_cs",
         ]
         for col in time_interactions:
             df.loc[:, f"{col}_x_time"] = df[col] * df["interval_frac_centered"]
@@ -348,6 +369,13 @@ class MeowFeatureGenerator(object):
             "ob_imb4_rank_cs",
             "ret3_rank_cs",
             "high_minus_low_rank_cs",
+            "day_open_gap_rank_cs",
+            "ret24_rank_cs",
+            "sell_vwad_dev_rank_cs",
+            "trade_vwad_gap_rank_cs",
+            "trade_high_center_gap_rank_cs",
+            "micro_dev_rank_cs",
+            "last_mid_dev_rank_cs",
         ]
         for col in u_interactions:
             df.loc[:, f"{col}_x_u"] = df[col] * df["interval_u"]
