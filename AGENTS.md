@@ -1,30 +1,264 @@
-# MEOW CORAL task
+# Task: MEOW LOB Deep Alpha
 
-## Goal
+Improve intraday alpha on MEOW. **Initial template:** Ridge + 6 features (~0.022 Pearson).
 
-Beat the **workshop template** (Ridge + 6 features, test Pearson ≈ **0.022**).
+**Score:** maximize test-set **Pearson correlation** vs `fret12` (`run_benchmark.py`).
 
-## Starting template (current default)
+**Train / test (fixed):** 20230601–20231130 train, 20231201–20231229 test.
 
-- `feat.py` + `mdl.py` + `solution.py` — same logic as MEOW workshop
-- `python run_benchmark.py` should be near **0.022**
+**Read first:** `DATA.md`, `data_io.py`
 
-## You may edit
+**Starting point (workshop template):**
+- `feat.py` — 6 hand-crafted features
+- `mdl.py` — Ridge (`alpha=0.5`)
+- `solution.py` — chunked fit/eval pipeline
 
-- `feat.py`, `mdl.py`, `solution.py`
-- `models/` — optional deep models (DeepLOB, TLOB, …); see `REFERENCES.md`
+**You may edit:** `solution.py`, `feat.py`, `mdl.py`, and add `models/` for deep LOB models.
 
-## Data
+**References for upgrades:** `REFERENCES.md` (DeepLOB, TLOB, …)
 
-Physical files: `/data/moew/data/`. Worktree `data/` is symlinked at setup.
+**Do not edit:** `run_benchmark.py`, `data/`, grader.
 
-## Eval
+**Local eval:** `python run_benchmark.py`
+**Submit:** `uv run coral eval -m "describe change"`
 
-```bash
-python run_benchmark.py
-uv run coral eval -m "message"
+
+## How This Works
+
+You are an autonomous agent with your own git worktree (own branch, own working copy). CORAL owns git — you never run `git` commands directly. Instead, you edit files and then run `coral eval -m "description"`. This stages your changes, commits them, runs the grader, and records the result as a JSON file in `.coral/attempts/`. The score is a number — **higher is better**.
+
+## Orientation
+
+Before you write any code, get oriented. Understand the problem, understand what's been tried.
+
+1. Read the task description above carefully. Understand what "better" means.
+2. Read the key files to understand the current state of the code.
+3. Check the leaderboard: `coral log`
+4. Check recent activity: `coral log --recent`
+5. Inspect top attempts: `coral show <hash>` to see exactly what code produced the best scores.
+6. Search for prior art: `coral log --search "keywords related to your first idea"`
+7. Read notes: Start with `.codex/notes/index.md` for a map of all research and experiment notes, then read the ones relevant to your approach.
+8. Check available skills: `ls .codex/skills/` — you may have built tools in previous runs that you can reuse.
+9. **Read the `deep-research` skill** (`.codex/skills/deep-research/SKILL.md`) — use it to conduct literature review and research before your first implementation attempt.
+10. **Know the `organize-files` skill** (`.codex/skills/organize-files/SKILL.md`) — use it to restructure the notes directory when it becomes cluttered. Run `bash .codex/skills/organize-files/scripts/audit.sh` to check.
+11. Check available subagents: `ls .codex/agents/` — you can spawn specialist subagents (e.g. `deep-researcher` for literature review, `librarian` for notes cleanup).
+
+Only after this orientation should you start making changes.
+
+# Workflow
+
+Your job is a loop: **research → plan → edit → eval → repeat**. Iterate fast — implement the minimum viable change, then eval to get a real score. **You should never stop until you reach / beat the best score. Run the loop and do your best to find the best solution.**
+
+## 1. Research
+
+**On your first iteration and whenever you're changing direction**, invest time in deep research before planning. Read the `deep-research` skill (`.codex/skills/deep-research/SKILL.md`) for a structured research workflow.
+
+**Research steps:**
+- **Understand the problem deeply** — read the grader code, understand the objective function, identify constraints and evaluation criteria.
+- **Survey the literature** — use web search to find state-of-the-art approaches, academic papers, benchmark comparisons, and existing implementations. Search broadly first (`"[problem] state of the art"`), then drill into specific techniques.
+- **Review domain knowledge** — if the task involves specialized domains (biology, chemistry, physics, math), research the underlying science. Understanding the domain often reveals approaches that pure ML/CS thinking misses.
+- **Analyze existing solutions** — check shared notes, past attempts, and what has been tried before. Build on what's known.
+- **Compare 2-4 candidate approaches** — document trade-offs, evidence, and implementation complexity for each.
+- **Write a research summary** — save findings to `.codex/notes/research-[topic].md` so all agents benefit. See `.codex/skills/deep-research/references/` for templates.
+
+**When to research:**
+- First iteration: always. Understand the landscape before writing code.
+- After getting stuck (3+ evals without improvement): step back and look for new angles.
+- When pivoting to a fundamentally different approach.
+- When the task involves unfamiliar domain knowledge.
+
+**When to skip:** If you have a clear plan from your last eval's feedback and just need to iterate on an existing approach, go straight to Step 2.
+
+## 2. Plan
+
+Before writing any code, think about what to try next. This is where your creativity matters.
+
+**Draw on available resources:**
+- Run `coral log -n 5` to see what's worked best so far. Look at top-scoring attempts — what do they have in common? What made them good?
+- Run `coral show <hash>` to inspect the diff of any interesting attempt — you can see exactly what code produced that score.
+- Check `coral notes` and `coral skills` for knowledge from previous runs.
+- Use web search to research techniques, algorithms, or approaches that might help.
+
+**Think creatively:**
+- Can you combine the best parts of two different high-scoring approaches?
+- Is there a completely different angle no one has tried yet?
+- What's the simplest change that might improve the score?
+- What did the feedback from recent evals tell you?
+
+Keep plans lightweight — a few sentences, not a document. The goal is to have a clear idea before you start editing.
+
+## 3. Edit
+
+Make changes to the codebase. Keep each change **focused on a single idea**. If you want to try two things, make two separate evals.
+
+**Bias toward speed:** Get something working and eval it. A rough implementation that gets scored is more valuable than a perfect implementation that never gets evaluated. You can always refine in the next cycle.
+
+To see what you've changed before evaluating:
+```
+coral diff
 ```
 
-## Do not change
+## 4. Evaluate
 
-`run_benchmark.py`, train/test dates in `data_io.py`.
+```
+coral eval -m "what you changed and why"
+```
+
+This stages all changes, commits with your message, and runs the grader. Write descriptive messages: "try grouped query attention with 8 heads" is useful, "update" is not.
+
+**Eval often.** Don't spend a long time coding without evaluating. Every eval gives you real signal about what works. If you're unsure whether a change helps, just eval it — you can always revert or checkout a previous version.
+
+**After every eval**, think about what you learned and update your knowledge:
+- Update or create a **note** in `.codex/notes/` capturing what worked, what didn't, and why.
+- Update or create a **skill** in `.codex/skills/` if you used a technique worth reusing.
+
+This is not optional — every eval should produce at least one note or skill update.
+
+**Important:** `coral eval` is the only way to get an official score. The grader runs your code in a separate process with independent verification — running your program directly may give different results.
+
+## 5. Read Results & Iterate
+
+The score and feedback print to your terminal after each eval. Use them to inform your next plan.
+
+**Navigation commands:**
+- `coral checkout <hash>` — reset your working tree to any previous attempt's code. Use this to go back to a high-scoring version and try a different direction from there or an under-explored version for more explorative attempts.
+- `coral revert` — undo just the last commit (shortcut for `coral checkout HEAD~1`).
+- `coral log` / `coral show <hash>` — compare and inspect previous work.
+
+Then go back to **Step 2: Plan** your next move (or **Step 1: Research** if you need a new direction).
+
+## 6. Record Knowledge
+
+Periodically, CORAL will pause your session and resume with a **reflection prompt**. Additionally, a periodic hook will remind you to document skills when you've been iterating without packaging reusable techniques. When either happens, **reflect on your past few attempts and write a note before continuing**. You can also write notes and skills at any time — don't wait for a prompt.
+
+**Important:** `.codex/` points to the shared public directory. Write notes and skills there **directly** — do NOT `git add` or `git commit` anything under `.codex/` or `.coral/`. Just write the files.
+
+### Notes
+
+Notes about what you've discovered — things that help you (or future agents) make better decisions:
+- What approaches worked and why
+- What doesn't work and should be avoided
+- Patterns in what scores well vs. poorly
+- Debugging tips, gotchas, or surprising behavior
+
+Write notes as individual files in `.codex/notes/`. Use short, descriptive, topic-based filenames in kebab-case — e.g. `gradient-clipping-helps.md`, `batch-size-vs-lr-tradeoff.md`. **Never** include agent IDs, eval numbers, or attempt hashes in filenames. Authorship belongs in the `creator` frontmatter field, not the filename.
+
+```
+cat > .codex/notes/your-finding.md << 'EOF'
+---
+creator: agent-1
+created: $(date -Iseconds)
+---
+# Your title here
+
+Describe what you tried, what the result was, and what conclusion you draw.
+Use specific numbers where possible.
+EOF
+```
+
+Not every eval needs a note — only write when you genuinely have something worth recording.
+
+### Skills (MANDATORY)
+
+After every eval, create or update at least one skill. Any technique, script, or workflow that improved your score (or that you'd use again) belongs in a skill.
+
+```
+mkdir -p .codex/skills/your-skill/scripts .codex/skills/your-skill/examples
+cat > .codex/skills/your-skill/SKILL.md << 'EOF'
+---
+name: your-skill
+description: One-line summary of what this does
+creator: agent-1
+created: $(date -Iseconds)
+---
+# What it does
+...
+
+# When to use it
+...
+
+# How to use it
+Step-by-step instructions or reference to scripts.
+EOF
+```
+
+Update an existing skill if it covers the same topic rather than creating a duplicate. Use `coral skills` to see what exists. Read `.codex/skills/skill-creator/SKILL.md` for a detailed workflow on creating, testing, and optimizing skills.
+
+**Spawn specialist subagents** when needed. Use the `deep-researcher` subagent to conduct literature review when you need fresh ideas or are exploring a new direction. Use the `librarian` subagent to clean up and organize notes when the knowledge base is getting cluttered. Check `.codex/agents/` for all available subagents.
+
+If the notes directory becomes hard to navigate, use the `organize-files` skill (`.codex/skills/organize-files/SKILL.md`) to restructure it.
+
+## Repeat
+
+Go back to Step 2. Keep iterating. When you run out of obvious ideas, that's when the interesting work begins — study the top attempts closely, look for patterns in what scores well, try combining approaches, go back to **Step 1: Research** to find new techniques via web search, revisit the `deep-research` skill for structured literature review, or pivot to a completely different direction.
+
+## Tips
+- Template Ridge baseline ≈ 0.022 Pearson on test set.
+- Beat the template with better features and/or models (see REFERENCES.md).
+- Train in date chunks (`MEOW_N_CHUNKS=4`); avoid loading 123 days at once.
+- Optional deep models can live under models/; wire them in solution.py.
+
+
+## Ground Rules
+
+- **You are fully autonomous.** Do not ask for permission, do not wait for instructions. Make decisions, run experiments, iterate.
+- **Never run git commands directly.** Use `coral eval`, `coral checkout`, `coral revert`, and `coral diff`. Do not use `git add`, `git commit`, `git reset`, or any other git commands.
+- **Never touch `.coral/` with git.** Do not run `git add .coral/` or `git add -f .coral/`. The `.coral/` directory is a shared symlink — committing it will break the evaluation system. The `.gitignore` handles this automatically. Write notes and skills there directly.
+- **Eval messages are your paper trail.** Write them like lab notebook entries — clear, specific, and honest.
+- **Eval early and often.** A fast cycle with real scores beats slow perfectionism. Get signal, then refine.
+
+## Reference
+
+### Shared State
+| Path | Contents |
+|------|----------|
+| `.coral/attempts/*.json` | Scored commits (your history) |
+| `.codex/notes/*.md` | Findings and observations |
+| `.codex/skills/*/` | Reusable skills (SKILL.md + scripts/ + examples/) |
+| `.codex/agents/*.md` | Specialist subagent definitions |
+
+### CLI
+```
+# Core workflow
+coral eval -m "description"          # Stage, commit, evaluate (blocks until scored)
+coral eval -m "..." --no-wait        # Fire off without blocking; pair with `coral wait`
+coral wait <hash>                    # Block until a previously-submitted eval is scored
+coral diff                           # Show uncommitted changes
+coral revert                         # Undo last commit
+coral checkout <hash>                # Reset to any previous attempt's code
+
+# Attempts
+coral log                            # Leaderboard (top 20)
+coral log -n 5                       # Top 5
+coral log --recent                   # Sort by time
+coral log --agent agent-1         # Your history
+coral log --search "query"           # Search all attempts
+coral show <hash>                    # Details + file summary for one attempt
+coral show <hash> --diff             # Details + full code diff
+
+# Notes
+coral notes                       # List all entries (titles only)
+coral notes --recent 5            # Last N entries
+coral notes --search "keyword"    # Search by keyword
+coral notes --read N              # Read entry #N
+coral notes --read all            # Read entire file
+
+# Skills
+coral skills                         # List all skills with descriptions
+coral skills --read <name>           # Show skill details + files
+
+# Heartbeat
+coral heartbeat                      # Show your heartbeat actions
+coral heartbeat set reflect --every 3           # Reflect every 3 evals
+coral heartbeat set myaction --every 5 --prompt "..."  # Custom action
+coral heartbeat remove consolidate   # Remove an action
+coral heartbeat reset                # Reset to task defaults
+```
+
+### Heartbeat Actions
+
+Heartbeat is your reminder system. You can set periodic actions that CORAL will trigger automatically — like reminders to reflect, consolidate notes, or anything else you want to do regularly. Use `coral heartbeat` to see your current reminders, and `coral heartbeat set` / `coral heartbeat remove` to customize them.
+
+## Your Identity
+
+You are **agent-1**. Use `creator: agent-1` in frontmatter when writing notes or skills.

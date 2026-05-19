@@ -11,9 +11,31 @@ class MeowFeatureGenerator(object):
             "ob_imb0",
             "ob_imb4",
             "ob_imb9",
+            "ob_imb19",
             "trade_imb",
-            "trade_imbema5",
-            "lagret12",
+            "turnover_imb",
+            "add_imb",
+            "cxl_imb",
+            "flow_imb",
+            "spread",
+            "micro_dev",
+            "last_mid_dev",
+            "ret1",
+            "ret3",
+            "ret6",
+            "ret12",
+            "trade_imb_ema6",
+            "ob_imb0_ema6",
+            "micro_dev_ema6",
+            "ret12_resid",
+            "trade_imb_cs",
+            "micro_dev_cs",
+            "ret1_cs",
+            "ret3_cs",
+            "ret6_cs",
+            "ret12_cs",
+            "ret12_resid_cs",
+            "spread_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -23,15 +45,63 @@ class MeowFeatureGenerator(object):
 
     def genFeatures(self, df):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
-        df.loc[:, "ob_imb0"] = (df["asize0"] - df["bsize0"]) / (df["asize0"] + df["bsize0"])
-        df.loc[:, "ob_imb4"] = (df["asize0_4"] - df["bsize0_4"]) / (df["asize0_4"] + df["bsize0_4"])
-        df.loc[:, "ob_imb9"] = (df["asize5_9"] - df["bsize5_9"]) / (df["asize5_9"] + df["bsize5_9"])
-        df.loc[:, "trade_imb"] = (df["tradeBuyQty"] - df["tradeSellQty"]) / (df["tradeBuyQty"] + df["tradeSellQty"])
-        df.loc[:, "trade_imbema5"] = df["trade_imb"].ewm(halflife=5).mean()
-        df.loc[:, "bret12"] = (df["midpx"] - df["midpx"].shift(12)) / df["midpx"].shift(12) # backward return
-        cxbret = df.groupby("interval")[["bret12"]].mean().reset_index().rename(columns={"bret12": "cx_bret12"})
-        df = df.merge(cxbret, on="interval", how="left")
-        df.loc[:, "lagret12"] = df["bret12"] - df["cx_bret12"]
-        xdf = df[self.mcols + self.featureNames()].set_index(self.mcols)
+        eps = 1e-6
+        df = df.sort_values(self.mcols, kind="mergesort").copy()
+        sym_day = df.groupby(["symbol", "date"], sort=False)
+
+        df.loc[:, "ob_imb0"] = (df["bsize0"] - df["asize0"]) / (df["bsize0"] + df["asize0"] + eps)
+        df.loc[:, "ob_imb4"] = (df["bsize0_4"] - df["asize0_4"]) / (df["bsize0_4"] + df["asize0_4"] + eps)
+        df.loc[:, "ob_imb9"] = (df["bsize5_9"] - df["asize5_9"]) / (df["bsize5_9"] + df["asize5_9"] + eps)
+        df.loc[:, "ob_imb19"] = (df["bsize10_19"] - df["asize10_19"]) / (df["bsize10_19"] + df["asize10_19"] + eps)
+        df.loc[:, "trade_imb"] = (df["tradeBuyQty"] - df["tradeSellQty"]) / (df["tradeBuyQty"] + df["tradeSellQty"] + eps)
+        df.loc[:, "turnover_imb"] = (
+            (df["tradeBuyTurnover"] - df["tradeSellTurnover"])
+            / (df["tradeBuyTurnover"] + df["tradeSellTurnover"] + eps)
+        )
+        df.loc[:, "add_imb"] = (df["addBuyQty"] - df["addSellQty"]) / (df["addBuyQty"] + df["addSellQty"] + eps)
+        df.loc[:, "cxl_imb"] = (df["cxlBuyQty"] - df["cxlSellQty"]) / (df["cxlBuyQty"] + df["cxlSellQty"] + eps)
+        df.loc[:, "flow_imb"] = (
+            (df["addBuyQty"] - df["cxlBuyQty"]) - (df["addSellQty"] - df["cxlSellQty"])
+        ) / (
+            df["addBuyQty"] + df["cxlBuyQty"] + df["addSellQty"] + df["cxlSellQty"] + eps
+        )
+        df.loc[:, "spread"] = (df["ask0"] - df["bid0"]) / (df["midpx"] + eps)
+        df.loc[:, "micro_dev"] = (
+            (
+                (df["ask0"] * df["bsize0"] + df["bid0"] * df["asize0"])
+                / (df["asize0"] + df["bsize0"] + eps)
+            )
+            - df["midpx"]
+        ) / (df["midpx"] + eps)
+        df.loc[:, "last_mid_dev"] = (df["lastpx"] - df["midpx"]) / (df["midpx"] + eps)
+
+        df.loc[:, "ret1"] = sym_day["midpx"].pct_change(1)
+        df.loc[:, "ret3"] = sym_day["midpx"].pct_change(3)
+        df.loc[:, "ret6"] = sym_day["midpx"].pct_change(6)
+        df.loc[:, "ret12"] = sym_day["midpx"].pct_change(12)
+
+        df.loc[:, "trade_imb_ema6"] = sym_day["trade_imb"].transform(
+            lambda s: s.ewm(halflife=6, adjust=False).mean()
+        )
+        df.loc[:, "ob_imb0_ema6"] = sym_day["ob_imb0"].transform(
+            lambda s: s.ewm(halflife=6, adjust=False).mean()
+        )
+        df.loc[:, "micro_dev_ema6"] = sym_day["micro_dev"].transform(
+            lambda s: s.ewm(halflife=6, adjust=False).mean()
+        )
+
+        df.loc[:, "ret12_resid"] = df["ret12"] - df.groupby(["date", "interval"], sort=False)["ret12"].transform("mean")
+
+        cs_cols = ["trade_imb", "micro_dev", "ret1", "ret3", "ret6", "ret12", "ret12_resid", "spread"]
+        cs_means = df.groupby(["date", "interval"], sort=False)[cs_cols].transform("mean")
+        for col in cs_cols:
+            df.loc[:, f"{col}_cs"] = df[col] - cs_means[col]
+
+        xdf = (
+            df[self.mcols + self.featureNames()]
+            .replace([np.inf, -np.inf], np.nan)
+            .fillna(0.0)
+            .set_index(self.mcols)
+        )
         ydf = df[self.mcols + [self.ycol]].set_index(self.mcols)
-        return xdf.fillna(0), ydf.fillna(0)
+        return xdf, ydf.fillna(0.0)
