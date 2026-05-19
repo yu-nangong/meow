@@ -24,6 +24,7 @@ class MeowFeatureGenerator(object):
             "ret3",
             "ret6",
             "ret12",
+            "ret24",
             "trade_imb_ema6",
             "ob_imb0_ema6",
             "micro_dev_ema6",
@@ -63,6 +64,13 @@ class MeowFeatureGenerator(object):
             "add_turn_imb_rank_cs",
             "day_open_gap_rank_cs",
             "trade_count_share_rank_cs",
+            "buy_vwad_dev_rank_cs",
+            "trade_vwad_gap_rank_cs",
+            "range_pos_rank_cs",
+            "last_mid_dev_rank_cs",
+            "ret24_rank_cs",
+            "ob_imb4_rank_cs",
+            "depth_pressure_04_rank_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -132,6 +140,7 @@ class MeowFeatureGenerator(object):
         df.loc[:, "ret3"] = sym_day["midpx"].pct_change(3)
         df.loc[:, "ret6"] = sym_day["midpx"].pct_change(6)
         df.loc[:, "ret12"] = sym_day["midpx"].pct_change(12)
+        df.loc[:, "ret24"] = sym_day["midpx"].pct_change(24)
 
         df.loc[:, "trade_imb_ema6"] = sym_day["trade_imb"].transform(
             lambda s: s.ewm(halflife=6, adjust=False).mean()
@@ -164,6 +173,13 @@ class MeowFeatureGenerator(object):
             "add_turn_imb",
             "day_open_gap",
             "trade_count_share",
+            "buy_vwad_dev",
+            "trade_vwad_gap",
+            "range_pos",
+            "last_mid_dev",
+            "ret24",
+            "ob_imb4",
+            "depth_pressure_04",
         ]
         rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
         for col in rank_cols:
