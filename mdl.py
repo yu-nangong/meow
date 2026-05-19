@@ -12,8 +12,8 @@ class MeowModel(object):
         self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.0"))
         self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
         self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
-        self.time_sq_alpha_mult = float(os.environ.get("MEOW_TIME_SQ_ALPHA_MULT", "0.7"))
-        self.u_sq_alpha_mult = float(os.environ.get("MEOW_U_SQ_ALPHA_MULT", "0.7"))
+        self.time_sq_alpha_mult = float(os.environ.get("MEOW_TIME_SQ_ALPHA_MULT", "0.6"))
+        self.u_sq_alpha_mult = float(os.environ.get("MEOW_U_SQ_ALPHA_MULT", "0.6"))
         self.exclude_families = {
             family.strip()
             for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
