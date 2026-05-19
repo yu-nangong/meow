@@ -116,6 +116,9 @@ class MeowFeatureGenerator(object):
             "high_vs_trade_high_gap_rank_cs",
             "interval_frac_centered",
             "interval_u",
+            "interval_frac_sq",
+            "interval_frac_cu",
+            "interval_u_sq",
             "trade_imb_rank_cs_x_time",
             "flow_imb_rank_cs_x_time",
             "ret1_rank_cs_x_time",
@@ -344,6 +347,9 @@ class MeowFeatureGenerator(object):
             {
                 "interval_frac_centered": interval_frac_centered,
                 "interval_u": interval_u,
+                "interval_frac_sq": interval_frac_centered * interval_frac_centered,
+                "interval_frac_cu": interval_frac_centered * interval_frac_centered * interval_frac_centered,
+                "interval_u_sq": interval_u * interval_u,
             },
             index=df.index,
         )
