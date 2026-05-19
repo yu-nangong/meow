@@ -17,7 +17,6 @@ class MeowFeatureGenerator(object):
         default = [
             "trade_imb_rank_cs",
             "range_pos_rank_cs",
-            "high_gap_rank_cs",
             "trade_vwad_gap_rank_cs",
             "high_minus_low_rank_cs",
             "trade_high_center_gap_rank_cs",
