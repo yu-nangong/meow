@@ -6,12 +6,23 @@ from log import log
 class MeowModel(object):
     def __init__(self, cacheDir):
         self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.25"))
+        self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.0"))
+        self.cs_alpha_mult = float(os.environ.get("MEOW_CS_ALPHA_MULT", "1.0"))
+        self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "1.0"))
+        self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.0"))
         self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
         self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
+        self.exclude_families = {
+            family.strip() for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",") if family.strip()
+        }
+        self.exclude_patterns = tuple(
+            pattern.strip() for pattern in os.environ.get("MEOW_EXCLUDE_PATTERNS", "").split(",") if pattern.strip()
+        )
         self._XtX = None
         self._Xty = None
         self._n_features = None
         self._feature_names = None
+        self._selected_columns = None
         self._sum_x = None
         self._sum_x2 = None
         self._sum_y = 0.0
@@ -26,6 +37,7 @@ class MeowModel(object):
         self._Xty = None
         self._n_features = None
         self._feature_names = None
+        self._selected_columns = None
         self._sum_x = None
         self._sum_x2 = None
         self._sum_y = 0.0
@@ -36,6 +48,7 @@ class MeowModel(object):
         self._intercept = 0.0
 
     def partial_fit(self, xdf, ydf):
+        xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
         y = ydf.to_numpy(dtype=np.float64).ravel()
         if self._XtX is None:
@@ -84,6 +97,14 @@ class MeowModel(object):
                 ridge_diag[idx] *= self.time_alpha_mult
             elif name.endswith("_x_u"):
                 ridge_diag[idx] *= self.u_alpha_mult
+            elif name.endswith("_rank_cs"):
+                ridge_diag[idx] *= self.rank_alpha_mult
+            elif name.endswith("_cs"):
+                ridge_diag[idx] *= self.cs_alpha_mult
+            elif name.startswith("interval_"):
+                ridge_diag[idx] *= self.time_basis_alpha_mult
+            else:
+                ridge_diag[idx] *= self.base_alpha_mult
         return ridge_diag
 
     def fit(self, xdf, ydf):
@@ -92,5 +113,39 @@ class MeowModel(object):
         self.finalize_fit()
 
     def predict(self, xdf):
+        xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
         return x @ self._coef + self._intercept
+
+    def _select_columns(self, xdf):
+        if not self.exclude_patterns:
+            if not self.exclude_families:
+                return xdf
+        if not self.exclude_patterns and not self.exclude_families:
+            return xdf
+        if self._selected_columns is None:
+            self._selected_columns = [
+                col
+                for col in xdf.columns
+                if self._keep_column(col)
+            ]
+        return xdf.loc[:, self._selected_columns]
+
+    def _keep_column(self, name):
+        if self.exclude_patterns and any(pattern in name for pattern in self.exclude_patterns):
+            return False
+        return self._family_of(name) not in self.exclude_families
+
+    @staticmethod
+    def _family_of(name):
+        if name.endswith("_x_time"):
+            return "time_interaction"
+        if name.endswith("_x_u"):
+            return "u_interaction"
+        if name.endswith("_rank_cs"):
+            return "rank"
+        if name.endswith("_cs"):
+            return "cs"
+        if name.startswith("interval_"):
+            return "time_basis"
+        return "raw"
