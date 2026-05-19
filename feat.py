@@ -37,6 +37,9 @@ class MeowFeatureGenerator(object):
             "ret12_cs",
             "ret12_resid_cs",
             "spread_cs",
+            "high_gap_cs",
+            "trade_buy_high_gap_cs",
+            "trade_sell_high_gap_cs",
             "trade_count_imb",
             "add_count_imb",
             "cxl_count_imb",
@@ -46,6 +49,11 @@ class MeowFeatureGenerator(object):
             "buy_vwad_dev",
             "sell_vwad_dev",
             "trade_vwad_gap",
+            "high_gap",
+            "low_gap",
+            "high_minus_low",
+            "trade_buy_high_gap",
+            "trade_sell_high_gap",
             "add_turn_imb",
             "cxl_turn_imb",
             "day_open_gap",
@@ -134,6 +142,11 @@ class MeowFeatureGenerator(object):
         df.loc[:, "buy_vwad_dev"] = (df["buyVwad"] - df["midpx"]) / (df["midpx"] + eps)
         df.loc[:, "sell_vwad_dev"] = (df["sellVwad"] - df["midpx"]) / (df["midpx"] + eps)
         df.loc[:, "trade_vwad_gap"] = (df["buyVwad"] - df["sellVwad"]) / (df["midpx"] + eps)
+        df.loc[:, "high_gap"] = (df["high"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "low_gap"] = (df["midpx"] - df["low"]) / (df["midpx"] + eps)
+        df.loc[:, "high_minus_low"] = (df["high"] - df["low"]) / (df["midpx"] + eps)
+        df.loc[:, "trade_buy_high_gap"] = (df["tradeBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "trade_sell_high_gap"] = (df["tradeSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
         df.loc[:, "day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         df.loc[:, "range_pos"] = (
             (df["midpx"] - df["low"]) - (df["high"] - df["midpx"])
@@ -164,7 +177,19 @@ class MeowFeatureGenerator(object):
         df.loc[:, "ret3_x_flow"] = df["ret3"] * df["flow_imb"]
         df.loc[:, "ret6_x_flow"] = df["ret6"] * df["flow_imb"]
 
-        cs_cols = ["trade_imb", "micro_dev", "ret1", "ret3", "ret6", "ret12", "ret12_resid", "spread"]
+        cs_cols = [
+            "trade_imb",
+            "micro_dev",
+            "ret1",
+            "ret3",
+            "ret6",
+            "ret12",
+            "ret12_resid",
+            "spread",
+            "high_gap",
+            "trade_buy_high_gap",
+            "trade_sell_high_gap",
+        ]
         cs_means = df.groupby(["date", "interval"], sort=False)[cs_cols].transform("mean")
         for col in cs_cols:
             df.loc[:, f"{col}_cs"] = df[col] - cs_means[col]
