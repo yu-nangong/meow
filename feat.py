@@ -19,7 +19,7 @@ class MeowFeatureGenerator(object):
             "range_pos_rank_cs",
             "high_gap_rank_cs",
             "trade_vwad_gap_rank_cs",
-            "trade_high_center_gap_rank_cs",
+            "high_minus_low_rank_cs",
         ]
         return cls._parse_feature_list_env("MEOW_NONLINEAR_TIME_FEATURES", default)
 
@@ -423,7 +423,7 @@ class MeowFeatureGenerator(object):
             "trade_vwad_gap_rank_cs",
             "trade_high_center_gap_rank_cs",
             "micro_dev_rank_cs",
-            "last_mid_dev_rank_cs",
+            "buy_vwad_dev_rank_cs",
         ]
         u_interactions_df = rank_df[u_interactions].mul(time_df["interval_u"], axis=0)
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
