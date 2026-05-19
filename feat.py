@@ -125,11 +125,21 @@ class MeowFeatureGenerator(object):
             "top_queue_share_imb_rank_cs_x_time",
             "depth_pressure_slope_rank_cs_x_time",
             "high_gap_rank_cs_x_time",
+            "ob_imb19_rank_cs_x_time",
+            "depth_pressure_1019_rank_cs_x_time",
+            "ob_imb4_rank_cs_x_time",
+            "ret3_rank_cs_x_time",
+            "ret12_resid_rank_cs_x_time",
             "trade_imb_rank_cs_x_u",
             "flow_imb_rank_cs_x_u",
             "range_pos_rank_cs_x_u",
             "top_queue_share_imb_rank_cs_x_u",
             "high_gap_rank_cs_x_u",
+            "ob_imb19_rank_cs_x_u",
+            "depth_pressure_1019_rank_cs_x_u",
+            "ob_imb4_rank_cs_x_u",
+            "ret3_rank_cs_x_u",
+            "high_minus_low_rank_cs_x_u",
         ]
 
     def __init__(self, cacheDir):
@@ -318,6 +328,11 @@ class MeowFeatureGenerator(object):
             "top_queue_share_imb_rank_cs",
             "depth_pressure_slope_rank_cs",
             "high_gap_rank_cs",
+            "ob_imb19_rank_cs",
+            "depth_pressure_1019_rank_cs",
+            "ob_imb4_rank_cs",
+            "ret3_rank_cs",
+            "ret12_resid_rank_cs",
         ]
         for col in time_interactions:
             df.loc[:, f"{col}_x_time"] = df[col] * df["interval_frac_centered"]
@@ -328,6 +343,11 @@ class MeowFeatureGenerator(object):
             "range_pos_rank_cs",
             "top_queue_share_imb_rank_cs",
             "high_gap_rank_cs",
+            "ob_imb19_rank_cs",
+            "depth_pressure_1019_rank_cs",
+            "ob_imb4_rank_cs",
+            "ret3_rank_cs",
+            "high_minus_low_rank_cs",
         ]
         for col in u_interactions:
             df.loc[:, f"{col}_x_u"] = df[col] * df["interval_u"]
