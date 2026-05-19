@@ -87,6 +87,11 @@ class MeowFeatureGenerator(object):
             "sell_vwad_dev_rank_cs",
             "depth_pressure_59_rank_cs",
             "depth_pressure_1019_rank_cs",
+            "high_gap_rank_cs",
+            "low_gap_rank_cs",
+            "high_minus_low_rank_cs",
+            "trade_buy_high_gap_rank_cs",
+            "trade_sell_high_gap_rank_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -221,6 +226,11 @@ class MeowFeatureGenerator(object):
             "sell_vwad_dev",
             "depth_pressure_59",
             "depth_pressure_1019",
+            "high_gap",
+            "low_gap",
+            "high_minus_low",
+            "trade_buy_high_gap",
+            "trade_sell_high_gap",
         ]
         rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
         for col in rank_cols:
