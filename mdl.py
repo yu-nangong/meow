@@ -5,7 +5,7 @@ from log import log
 
 class MeowModel(object):
     def __init__(self, cacheDir):
-        self.alpha = 2.0
+        self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.25"))
         self._XtX = None
         self._Xty = None
         self._n_features = None
