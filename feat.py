@@ -71,6 +71,14 @@ class MeowFeatureGenerator(object):
             "ret24_rank_cs",
             "ob_imb4_rank_cs",
             "depth_pressure_04_rank_cs",
+            "ob_imb0_rank_cs",
+            "ob_imb9_rank_cs",
+            "ob_imb19_rank_cs",
+            "spread_rank_cs",
+            "ret12_rank_cs",
+            "sell_vwad_dev_rank_cs",
+            "depth_pressure_59_rank_cs",
+            "depth_pressure_1019_rank_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -180,6 +188,14 @@ class MeowFeatureGenerator(object):
             "ret24",
             "ob_imb4",
             "depth_pressure_04",
+            "ob_imb0",
+            "ob_imb9",
+            "ob_imb19",
+            "spread",
+            "ret12",
+            "sell_vwad_dev",
+            "depth_pressure_59",
+            "depth_pressure_1019",
         ]
         rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
         for col in rank_cols:
