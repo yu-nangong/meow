@@ -5,9 +5,26 @@ from log import log
 
 
 class MeowFeatureGenerator(object):
+    @staticmethod
+    def _parse_feature_list_env(name, default):
+        raw = os.environ.get(name, "")
+        if not raw.strip():
+            return list(default)
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    @classmethod
+    def _nonlinear_time_interactions(cls):
+        default = [
+            "trade_imb_rank_cs",
+            "high_gap_rank_cs",
+            "trade_vwad_gap_rank_cs",
+            "micro_dev_rank_cs",
+        ]
+        return cls._parse_feature_list_env("MEOW_NONLINEAR_TIME_FEATURES", default)
+
     @classmethod
     def featureNames(cls):
-        return [
+        feature_names = [
             "ob_imb0",
             "ob_imb4",
             "ob_imb9",
@@ -160,16 +177,11 @@ class MeowFeatureGenerator(object):
             "trade_vwad_gap_rank_cs_x_u",
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
-            "last_mid_dev_rank_cs_x_u",
-            "trade_imb_rank_cs_x_time_sq",
-            "ret1_rank_cs_x_time_sq",
-            "day_open_gap_rank_cs_x_time_sq",
-            "micro_dev_rank_cs_x_time_sq",
-            "trade_imb_rank_cs_x_u_sq",
-            "ret1_rank_cs_x_u_sq",
-            "day_open_gap_rank_cs_x_u_sq",
-            "micro_dev_rank_cs_x_u_sq",
         ]
+        nonlinear_time_interactions = cls._nonlinear_time_interactions()
+        feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
+        feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
+        return feature_names
 
     def __init__(self, cacheDir):
         self.cacheDir = cacheDir
@@ -415,17 +427,16 @@ class MeowFeatureGenerator(object):
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
 
         # Keep second-order gates narrow; the broader version was killed by grader resource limits.
-        nonlinear_time_interactions = [
-            "trade_imb_rank_cs",
-            "ret1_rank_cs",
-            "day_open_gap_rank_cs",
-            "micro_dev_rank_cs",
-        ]
-        time_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_frac_sq"], axis=0)
-        time_sq_interactions_df.columns = [f"{col}_x_time_sq" for col in nonlinear_time_interactions]
+        nonlinear_time_interactions = self._nonlinear_time_interactions()
+        if nonlinear_time_interactions:
+            time_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_frac_sq"], axis=0)
+            time_sq_interactions_df.columns = [f"{col}_x_time_sq" for col in nonlinear_time_interactions]
 
-        u_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_u_sq"], axis=0)
-        u_sq_interactions_df.columns = [f"{col}_x_u_sq" for col in nonlinear_time_interactions]
+            u_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_u_sq"], axis=0)
+            u_sq_interactions_df.columns = [f"{col}_x_u_sq" for col in nonlinear_time_interactions]
+        else:
+            time_sq_interactions_df = pd.DataFrame(index=df.index)
+            u_sq_interactions_df = pd.DataFrame(index=df.index)
 
         feat_df = pd.concat(
             [
