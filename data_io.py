@@ -10,19 +10,20 @@ import numpy as np
 import pandas as pd
 
 # Single physical copy: /data/moew/data/*.h5
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CANONICAL_DATA_DIR = REPO_ROOT / "data"
+CANONICAL_DATA_DIR = Path("/data/moew/data")
 
 
 def default_h5dir() -> str:
-    """MEOW_DATA_DIR > repo data/ > ./data symlink in cwd."""
+    """Resolve the MEOW dataset location robustly across worktrees."""
     if os.environ.get("MEOW_DATA_DIR"):
         return os.environ["MEOW_DATA_DIR"]
-    if CANONICAL_DATA_DIR.is_dir():
-        return str(CANONICAL_DATA_DIR)
-    local = Path("data")
-    if local.is_dir():
-        return str(local.resolve())
+    local_candidates = [
+        Path(__file__).resolve().parent / "data",
+        Path("data"),
+    ]
+    for candidate in local_candidates:
+        if candidate.is_dir():
+            return str(candidate.resolve())
     return str(CANONICAL_DATA_DIR)
 
 
