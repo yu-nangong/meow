@@ -95,9 +95,9 @@ class MeowModel(object):
     def _ridge_diag(self):
         ridge_diag = np.full(self._n_features, self.alpha, dtype=np.float64)
         for idx, name in enumerate(self._feature_names):
-            if name.endswith("_x_time"):
+            if name.endswith("_x_time") or name.endswith("_x_time_sq"):
                 ridge_diag[idx] *= self.time_alpha_mult
-            elif name.endswith("_x_u"):
+            elif name.endswith("_x_u") or name.endswith("_x_u_sq"):
                 ridge_diag[idx] *= self.u_alpha_mult
             elif name.endswith("_rank_cs"):
                 ridge_diag[idx] *= self.rank_alpha_mult
@@ -140,9 +140,9 @@ class MeowModel(object):
 
     @staticmethod
     def _family_of(name):
-        if name.endswith("_x_time"):
+        if name.endswith("_x_time") or name.endswith("_x_time_sq"):
             return "time_interaction"
-        if name.endswith("_x_u"):
+        if name.endswith("_x_u") or name.endswith("_x_u_sq"):
             return "u_interaction"
         if name.endswith("_rank_cs"):
             return "rank"

@@ -161,6 +161,20 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
             "last_mid_dev_rank_cs_x_u",
+            "trade_imb_rank_cs_x_time_sq",
+            "flow_imb_rank_cs_x_time_sq",
+            "ret1_rank_cs_x_time_sq",
+            "range_pos_rank_cs_x_time_sq",
+            "high_gap_rank_cs_x_time_sq",
+            "day_open_gap_rank_cs_x_time_sq",
+            "micro_dev_rank_cs_x_time_sq",
+            "trade_imb_rank_cs_x_u_sq",
+            "flow_imb_rank_cs_x_u_sq",
+            "ret1_rank_cs_x_u_sq",
+            "range_pos_rank_cs_x_u_sq",
+            "high_gap_rank_cs_x_u_sq",
+            "day_open_gap_rank_cs_x_u_sq",
+            "micro_dev_rank_cs_x_u_sq",
         ]
 
     def __init__(self, cacheDir):
@@ -406,9 +420,34 @@ class MeowFeatureGenerator(object):
         u_interactions_df = rank_df[u_interactions].mul(time_df["interval_u"], axis=0)
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
 
-        feat_df = pd.concat([base_df, cs_out, rank_df, time_df, time_interactions_df, u_interactions_df], axis=1).astype(
-            np.float32
-        )
+        nonlinear_time_interactions = [
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "ret1_rank_cs",
+            "range_pos_rank_cs",
+            "high_gap_rank_cs",
+            "day_open_gap_rank_cs",
+            "micro_dev_rank_cs",
+        ]
+        time_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_frac_sq"], axis=0)
+        time_sq_interactions_df.columns = [f"{col}_x_time_sq" for col in nonlinear_time_interactions]
+
+        u_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_u_sq"], axis=0)
+        u_sq_interactions_df.columns = [f"{col}_x_u_sq" for col in nonlinear_time_interactions]
+
+        feat_df = pd.concat(
+            [
+                base_df,
+                cs_out,
+                rank_df,
+                time_df,
+                time_interactions_df,
+                u_interactions_df,
+                time_sq_interactions_df,
+                u_sq_interactions_df,
+            ],
+            axis=1,
+        ).astype(np.float32)
 
         xdf = (
             pd.concat([df[self.mcols], feat_df[self.featureNames()]], axis=1)
