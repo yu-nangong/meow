@@ -162,17 +162,11 @@ class MeowFeatureGenerator(object):
             "micro_dev_rank_cs_x_u",
             "last_mid_dev_rank_cs_x_u",
             "trade_imb_rank_cs_x_time_sq",
-            "flow_imb_rank_cs_x_time_sq",
             "ret1_rank_cs_x_time_sq",
-            "range_pos_rank_cs_x_time_sq",
-            "high_gap_rank_cs_x_time_sq",
             "day_open_gap_rank_cs_x_time_sq",
             "micro_dev_rank_cs_x_time_sq",
             "trade_imb_rank_cs_x_u_sq",
-            "flow_imb_rank_cs_x_u_sq",
             "ret1_rank_cs_x_u_sq",
-            "range_pos_rank_cs_x_u_sq",
-            "high_gap_rank_cs_x_u_sq",
             "day_open_gap_rank_cs_x_u_sq",
             "micro_dev_rank_cs_x_u_sq",
         ]
@@ -420,12 +414,10 @@ class MeowFeatureGenerator(object):
         u_interactions_df = rank_df[u_interactions].mul(time_df["interval_u"], axis=0)
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
 
+        # Keep second-order gates narrow; the broader version was killed by grader resource limits.
         nonlinear_time_interactions = [
             "trade_imb_rank_cs",
-            "flow_imb_rank_cs",
             "ret1_rank_cs",
-            "range_pos_rank_cs",
-            "high_gap_rank_cs",
             "day_open_gap_rank_cs",
             "micro_dev_rank_cs",
         ]

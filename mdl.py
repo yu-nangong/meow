@@ -12,6 +12,8 @@ class MeowModel(object):
         self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.0"))
         self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
         self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
+        self.time_sq_alpha_mult = float(os.environ.get("MEOW_TIME_SQ_ALPHA_MULT", "0.7"))
+        self.u_sq_alpha_mult = float(os.environ.get("MEOW_U_SQ_ALPHA_MULT", "0.7"))
         self.exclude_families = {
             family.strip()
             for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
@@ -95,9 +97,13 @@ class MeowModel(object):
     def _ridge_diag(self):
         ridge_diag = np.full(self._n_features, self.alpha, dtype=np.float64)
         for idx, name in enumerate(self._feature_names):
-            if name.endswith("_x_time") or name.endswith("_x_time_sq"):
+            if name.endswith("_x_time_sq"):
+                ridge_diag[idx] *= self.time_sq_alpha_mult
+            elif name.endswith("_x_u_sq"):
+                ridge_diag[idx] *= self.u_sq_alpha_mult
+            elif name.endswith("_x_time"):
                 ridge_diag[idx] *= self.time_alpha_mult
-            elif name.endswith("_x_u") or name.endswith("_x_u_sq"):
+            elif name.endswith("_x_u"):
                 ridge_diag[idx] *= self.u_alpha_mult
             elif name.endswith("_rank_cs"):
                 ridge_diag[idx] *= self.rank_alpha_mult
@@ -140,9 +146,13 @@ class MeowModel(object):
 
     @staticmethod
     def _family_of(name):
-        if name.endswith("_x_time") or name.endswith("_x_time_sq"):
+        if name.endswith("_x_time_sq"):
+            return "time_sq_interaction"
+        if name.endswith("_x_u_sq"):
+            return "u_sq_interaction"
+        if name.endswith("_x_time"):
             return "time_interaction"
-        if name.endswith("_x_u") or name.endswith("_x_u_sq"):
+        if name.endswith("_x_u"):
             return "u_interaction"
         if name.endswith("_rank_cs"):
             return "rank"
