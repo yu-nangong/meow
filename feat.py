@@ -19,7 +19,7 @@ class MeowFeatureGenerator(object):
             "high_gap_rank_cs",
             "trade_vwad_gap_rank_cs",
             "high_minus_low_rank_cs",
-            "trade_high_center_gap_rank_cs",
+            "range_pos_rank_cs",
         ]
         return cls._parse_feature_list_env("MEOW_NONLINEAR_TIME_FEATURES", default)
 
@@ -155,7 +155,7 @@ class MeowFeatureGenerator(object):
             "ret24_rank_cs_x_time",
             "sell_vwad_dev_rank_cs_x_time",
             "trade_vwad_gap_rank_cs_x_time",
-            "trade_high_center_gap_rank_cs_x_time",
+            "high_minus_low_rank_cs_x_time",
             "micro_dev_rank_cs_x_time",
             "buy_vwad_dev_rank_cs_x_time",
             "trade_imb_rank_cs_x_u",
@@ -395,7 +395,7 @@ class MeowFeatureGenerator(object):
             "ret24_rank_cs",
             "sell_vwad_dev_rank_cs",
             "trade_vwad_gap_rank_cs",
-            "trade_high_center_gap_rank_cs",
+            "high_minus_low_rank_cs",
             "micro_dev_rank_cs",
             "buy_vwad_dev_rank_cs",
         ]
