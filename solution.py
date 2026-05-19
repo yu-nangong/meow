@@ -5,6 +5,7 @@ Agents may replace this with deeper models in models/ or extend training here.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -39,8 +40,28 @@ def _pearson_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]
     return {"pearson": pcor, "r2": r2, "mse": mse}
 
 
+def _resolve_h5dir(h5dir: Optional[str]) -> str:
+    candidates = [
+        h5dir,
+        os.environ.get("MEOW_DATA_DIR"),
+        str(Path(__file__).resolve().parent / "data"),
+        "/data/moew/data",
+    ]
+    last_error = None
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return verify_data_dir(candidate)
+        except FileNotFoundError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return verify_data_dir()
+
+
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
-    h5dir = verify_data_dir() if h5dir is None else h5dir
+    h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = MeowModel(cacheDir=None)
