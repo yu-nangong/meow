@@ -15,7 +15,7 @@ from data_io import iter_days, train_test_dates, verify_data_dir
 from feat import MeowFeatureGenerator
 from mdl import MeowModel
 
-N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "4"))
+N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
