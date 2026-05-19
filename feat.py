@@ -36,6 +36,24 @@ class MeowFeatureGenerator(object):
             "ret12_cs",
             "ret12_resid_cs",
             "spread_cs",
+            "trade_count_imb",
+            "add_count_imb",
+            "cxl_count_imb",
+            "depth_pressure_04",
+            "depth_pressure_59",
+            "depth_pressure_1019",
+            "buy_vwad_dev",
+            "sell_vwad_dev",
+            "trade_vwad_gap",
+            "ret3_x_flow",
+            "ret6_x_flow",
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "micro_dev_rank_cs",
+            "ret1_rank_cs",
+            "ret3_rank_cs",
+            "ret6_rank_cs",
+            "ret12_resid_rank_cs",
         ]
 
     def __init__(self, cacheDir):
@@ -65,6 +83,12 @@ class MeowFeatureGenerator(object):
         ) / (
             df["addBuyQty"] + df["cxlBuyQty"] + df["addSellQty"] + df["cxlSellQty"] + eps
         )
+        df.loc[:, "trade_count_imb"] = (df["nTradeBuy"] - df["nTradeSell"]) / (df["nTradeBuy"] + df["nTradeSell"] + eps)
+        df.loc[:, "add_count_imb"] = (df["nAddBuy"] - df["nAddSell"]) / (df["nAddBuy"] + df["nAddSell"] + eps)
+        df.loc[:, "cxl_count_imb"] = (df["nCxlBuy"] - df["nCxlSell"]) / (df["nCxlBuy"] + df["nCxlSell"] + eps)
+        df.loc[:, "depth_pressure_04"] = (df["btr0_4"] - df["atr0_4"]) / (df["btr0_4"] + df["atr0_4"] + eps)
+        df.loc[:, "depth_pressure_59"] = (df["btr5_9"] - df["atr5_9"]) / (df["btr5_9"] + df["atr5_9"] + eps)
+        df.loc[:, "depth_pressure_1019"] = (df["btr10_19"] - df["atr10_19"]) / (df["btr10_19"] + df["atr10_19"] + eps)
         df.loc[:, "spread"] = (df["ask0"] - df["bid0"]) / (df["midpx"] + eps)
         df.loc[:, "micro_dev"] = (
             (
@@ -74,6 +98,9 @@ class MeowFeatureGenerator(object):
             - df["midpx"]
         ) / (df["midpx"] + eps)
         df.loc[:, "last_mid_dev"] = (df["lastpx"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "buy_vwad_dev"] = (df["buyVwad"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "sell_vwad_dev"] = (df["sellVwad"] - df["midpx"]) / (df["midpx"] + eps)
+        df.loc[:, "trade_vwad_gap"] = (df["buyVwad"] - df["sellVwad"]) / (df["midpx"] + eps)
 
         df.loc[:, "ret1"] = sym_day["midpx"].pct_change(1)
         df.loc[:, "ret3"] = sym_day["midpx"].pct_change(3)
@@ -91,11 +118,18 @@ class MeowFeatureGenerator(object):
         )
 
         df.loc[:, "ret12_resid"] = df["ret12"] - df.groupby(["date", "interval"], sort=False)["ret12"].transform("mean")
+        df.loc[:, "ret3_x_flow"] = df["ret3"] * df["flow_imb"]
+        df.loc[:, "ret6_x_flow"] = df["ret6"] * df["flow_imb"]
 
         cs_cols = ["trade_imb", "micro_dev", "ret1", "ret3", "ret6", "ret12", "ret12_resid", "spread"]
         cs_means = df.groupby(["date", "interval"], sort=False)[cs_cols].transform("mean")
         for col in cs_cols:
             df.loc[:, f"{col}_cs"] = df[col] - cs_means[col]
+
+        rank_cols = ["trade_imb", "flow_imb", "micro_dev", "ret1", "ret3", "ret6", "ret12_resid"]
+        rank_df = df.groupby(["date", "interval"], sort=False)[rank_cols].rank(pct=True)
+        for col in rank_cols:
+            df.loc[:, f"{col}_rank_cs"] = rank_df[col] - 0.5
 
         xdf = (
             df[self.mcols + self.featureNames()]
