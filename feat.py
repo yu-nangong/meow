@@ -12,6 +12,8 @@ class MeowFeatureGenerator(object):
             "ob_imb4",
             "ob_imb9",
             "ob_imb19",
+            "ob_imb_front_back",
+            "ob_imb_inner_outer",
             "trade_imb",
             "turnover_imb",
             "add_imb",
@@ -46,6 +48,12 @@ class MeowFeatureGenerator(object):
             "depth_pressure_04",
             "depth_pressure_59",
             "depth_pressure_1019",
+            "depth_pressure_slope",
+            "depth_pressure_curve",
+            "bid_near_share",
+            "ask_near_share",
+            "near_share_imb",
+            "top_queue_share_imb",
             "buy_vwad_dev",
             "sell_vwad_dev",
             "trade_vwad_gap",
@@ -86,11 +94,17 @@ class MeowFeatureGenerator(object):
             "ob_imb0_rank_cs",
             "ob_imb9_rank_cs",
             "ob_imb19_rank_cs",
+            "ob_imb_front_back_rank_cs",
+            "ob_imb_inner_outer_rank_cs",
             "spread_rank_cs",
             "ret12_rank_cs",
             "sell_vwad_dev_rank_cs",
             "depth_pressure_59_rank_cs",
             "depth_pressure_1019_rank_cs",
+            "depth_pressure_slope_rank_cs",
+            "depth_pressure_curve_rank_cs",
+            "near_share_imb_rank_cs",
+            "top_queue_share_imb_rank_cs",
             "high_gap_rank_cs",
             "low_gap_rank_cs",
             "high_minus_low_rank_cs",
@@ -117,6 +131,8 @@ class MeowFeatureGenerator(object):
         df.loc[:, "ob_imb4"] = (df["bsize0_4"] - df["asize0_4"]) / (df["bsize0_4"] + df["asize0_4"] + eps)
         df.loc[:, "ob_imb9"] = (df["bsize5_9"] - df["asize5_9"]) / (df["bsize5_9"] + df["asize5_9"] + eps)
         df.loc[:, "ob_imb19"] = (df["bsize10_19"] - df["asize10_19"]) / (df["bsize10_19"] + df["asize10_19"] + eps)
+        df.loc[:, "ob_imb_front_back"] = df["ob_imb0"] - df["ob_imb19"]
+        df.loc[:, "ob_imb_inner_outer"] = df["ob_imb4"] - 0.5 * (df["ob_imb9"] + df["ob_imb19"])
         df.loc[:, "trade_imb"] = (df["tradeBuyQty"] - df["tradeSellQty"]) / (df["tradeBuyQty"] + df["tradeSellQty"] + eps)
         df.loc[:, "turnover_imb"] = (
             (df["tradeBuyTurnover"] - df["tradeSellTurnover"])
@@ -143,6 +159,20 @@ class MeowFeatureGenerator(object):
         df.loc[:, "depth_pressure_04"] = (df["btr0_4"] - df["atr0_4"]) / (df["btr0_4"] + df["atr0_4"] + eps)
         df.loc[:, "depth_pressure_59"] = (df["btr5_9"] - df["atr5_9"]) / (df["btr5_9"] + df["atr5_9"] + eps)
         df.loc[:, "depth_pressure_1019"] = (df["btr10_19"] - df["atr10_19"]) / (df["btr10_19"] + df["atr10_19"] + eps)
+        df.loc[:, "depth_pressure_slope"] = df["depth_pressure_04"] - df["depth_pressure_1019"]
+        df.loc[:, "depth_pressure_curve"] = df["depth_pressure_59"] - 0.5 * (
+            df["depth_pressure_04"] + df["depth_pressure_1019"]
+        )
+        bid_depth_total = df["bsize0_4"] + df["bsize5_9"] + df["bsize10_19"]
+        ask_depth_total = df["asize0_4"] + df["asize5_9"] + df["asize10_19"]
+        df.loc[:, "bid_near_share"] = df["bsize0_4"] / (bid_depth_total + eps)
+        df.loc[:, "ask_near_share"] = df["asize0_4"] / (ask_depth_total + eps)
+        df.loc[:, "near_share_imb"] = df["bid_near_share"] - df["ask_near_share"]
+        df.loc[:, "top_queue_share_imb"] = (
+            df["bsize0"] / (bid_depth_total + eps)
+        ) - (
+            df["asize0"] / (ask_depth_total + eps)
+        )
         df.loc[:, "spread"] = (df["ask0"] - df["bid0"]) / (df["midpx"] + eps)
         df.loc[:, "micro_dev"] = (
             (
@@ -233,11 +263,17 @@ class MeowFeatureGenerator(object):
             "ob_imb0",
             "ob_imb9",
             "ob_imb19",
+            "ob_imb_front_back",
+            "ob_imb_inner_outer",
             "spread",
             "ret12",
             "sell_vwad_dev",
             "depth_pressure_59",
             "depth_pressure_1019",
+            "depth_pressure_slope",
+            "depth_pressure_curve",
+            "near_share_imb",
+            "top_queue_share_imb",
             "high_gap",
             "low_gap",
             "high_minus_low",
