@@ -6,12 +6,12 @@ from log import log
 class MeowModel(object):
     def __init__(self, cacheDir):
         self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.15"))
-        self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.0"))
+        self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.25"))
         self.cs_alpha_mult = float(os.environ.get("MEOW_CS_ALPHA_MULT", "1.0"))
-        self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "1.0"))
-        self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.0"))
-        self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
-        self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
+        self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "0.85"))
+        self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.5"))
+        self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.30"))
+        self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.30"))
         self.exclude_families = {
             family.strip() for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",") if family.strip()
         }
