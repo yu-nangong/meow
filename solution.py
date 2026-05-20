@@ -16,6 +16,7 @@ from feat import MeowFeatureGenerator
 from mdl import MeowModel
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
+FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.1"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -60,6 +61,20 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
     return verify_data_dir()
 
 
+def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
+    if not FORECAST_CS_MEAN_SHRINK:
+        return pred
+    out = pd.DataFrame(
+        {
+            "date": ydf.index.get_level_values("date"),
+            "interval": ydf.index.get_level_values("interval"),
+            "forecast": pred,
+        }
+    )
+    group_mean = out.groupby(["date", "interval"], sort=False)["forecast"].transform("mean")
+    return (out["forecast"] - FORECAST_CS_MEAN_SHRINK * group_mean).to_numpy(dtype=np.float64, copy=False)
+
+
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
@@ -81,7 +96,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        ydf.loc[:, "forecast"] = model.predict(xdf)
+        ydf.loc[:, "forecast"] = _postprocess_forecast(ydf, model.predict(xdf))
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
