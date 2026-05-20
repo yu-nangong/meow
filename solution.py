@@ -16,7 +16,7 @@ from feat import MeowFeatureGenerator
 from mdl import MeowModel
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
-FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.1"))
+FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.2"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
