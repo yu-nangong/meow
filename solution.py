@@ -17,6 +17,8 @@ from mdl import MeowModel
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.2"))
+LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "1") != "0"
+FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -61,9 +63,7 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
     return verify_data_dir()
 
 
-def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
-    if not FORECAST_CS_MEAN_SHRINK:
-        return pred
+def _group_forecast_mean(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
     out = pd.DataFrame(
         {
             "date": ydf.index.get_level_values("date"),
@@ -72,7 +72,37 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
         }
     )
     group_mean = out.groupby(["date", "interval"], sort=False)["forecast"].transform("mean")
-    return (out["forecast"] - FORECAST_CS_MEAN_SHRINK * group_mean).to_numpy(dtype=np.float64, copy=False)
+    return group_mean.to_numpy(dtype=np.float64, copy=False)
+
+
+def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
+    if not mean_shrink:
+        return pred
+    group_mean = _group_forecast_mean(ydf, pred)
+    return pred - mean_shrink * group_mean
+
+
+def _fit_forecast_mean_shrink(
+    h5dir: str,
+    feat_gen: MeowFeatureGenerator,
+    model: MeowModel,
+    train_dates: List[int],
+) -> float:
+    numer = 0.0
+    denom = 0.0
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        pred = model.predict(xdf)
+        del xdf
+        group_mean = _group_forecast_mean(ydf, pred)
+        err = pred - ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+        numer += float(err @ group_mean)
+        denom += float(group_mean @ group_mean)
+    if denom <= 0.0:
+        return FORECAST_CS_MEAN_SHRINK
+    return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
 
 
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
@@ -89,6 +119,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, ydf)
         del xdf, ydf
     model.finalize_fit()
+    forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
+    if LEARN_FORECAST_CS_MEAN_SHRINK:
+        forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -96,7 +129,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        ydf.loc[:, "forecast"] = _postprocess_forecast(ydf, model.predict(xdf))
+        ydf.loc[:, "forecast"] = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
