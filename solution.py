@@ -17,9 +17,11 @@ from mdl import MeowModel
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.2"))
-LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "1") != "0"
+LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "0") != "0"
 FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
+FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
+FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -64,7 +66,7 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
     return verify_data_dir()
 
 
-def _group_forecast_mean(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
+def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
     out = pd.DataFrame(
         {
             "date": ydf.index.get_level_values("date"),
@@ -72,15 +74,34 @@ def _group_forecast_mean(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
             "forecast": pred,
         }
     )
-    group_mean = out.groupby(["date", "interval"], sort=False)["forecast"].transform("mean")
-    return group_mean.to_numpy(dtype=np.float64, copy=False)
+    grp = out.groupby(["date", "interval"], sort=False)["forecast"]
+    out["group_mean"] = grp.transform("mean")
+    out["group_median"] = grp.transform("median")
+    out["group_std"] = grp.transform("std").fillna(0.0)
+    return out
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
-    if not mean_shrink:
+    if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA:
         return pred
-    group_mean = _group_forecast_mean(ydf, pred)
-    return pred - mean_shrink * group_mean
+    out = _group_forecast_stats(ydf, pred)
+    if FORECAST_CS_CENTER_STAT == "median":
+        group_center = out["group_median"].to_numpy(dtype=np.float64, copy=False)
+    else:
+        group_center = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
+    shrink = mean_shrink
+    if FORECAST_CS_MEAN_ADAPTIVE_BETA:
+        mean_abs = np.abs(group_center)
+        group_std = out["group_std"].to_numpy(dtype=np.float64, copy=False)
+        common_mode_share = mean_abs / (mean_abs + group_std + 1e-12)
+        shrink = np.clip(
+            mean_shrink + FORECAST_CS_MEAN_ADAPTIVE_BETA * common_mode_share,
+            0.0,
+            FORECAST_CS_MEAN_SHRINK_MAX,
+        )
+    else:
+        shrink = mean_shrink
+    return pred - shrink * group_center
 
 
 def _fit_forecast_mean_shrink(
@@ -101,7 +122,7 @@ def _fit_forecast_mean_shrink(
         del raw
         pred = model.predict(xdf)
         del xdf
-        group_mean = _group_forecast_mean(ydf, pred)
+        group_mean = _group_forecast_stats(ydf, pred)["group_mean"].to_numpy(dtype=np.float64, copy=False)
         err = pred - ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
         numer += float(err @ group_mean)
         denom += float(group_mean @ group_mean)
