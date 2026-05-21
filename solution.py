@@ -18,6 +18,7 @@ from mdl import MeowModel
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.2"))
 LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "1") != "0"
+FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 
 
@@ -88,9 +89,13 @@ def _fit_forecast_mean_shrink(
     model: MeowModel,
     train_dates: List[int],
 ) -> float:
+    if FORECAST_CS_MEAN_SHRINK_TAIL_DAYS > 0:
+        calib_dates = train_dates[-FORECAST_CS_MEAN_SHRINK_TAIL_DAYS :]
+    else:
+        calib_dates = train_dates
     numer = 0.0
     denom = 0.0
-    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+    for chunk in _chunk_dates(calib_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
