@@ -22,7 +22,8 @@ FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SH
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.0"))
-FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.1"))
+FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.0"))
+FORECAST_CS_SKEW_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_TAIL_BETA", "0.1"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -89,6 +90,7 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         and not FORECAST_CS_MEAN_ADAPTIVE_BETA
         and not FORECAST_CS_SKEW_SHRINK
         and not FORECAST_CS_SKEW_ATTENUATION_BETA
+        and not FORECAST_CS_SKEW_TAIL_BETA
     ):
         return pred
     out = _group_forecast_stats(ydf, pred)
@@ -114,6 +116,12 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
     if FORECAST_CS_SKEW_ATTENUATION_BETA:
         skew_share = np.abs(skew_component) / (np.abs(skew_component) + group_std + 1e-12)
         residual_scale = np.clip(1.0 - FORECAST_CS_SKEW_ATTENUATION_BETA * skew_share, 0.0, 1.0)
+        pred = pred - residual + residual * residual_scale
+        residual = pred - group_center
+    if FORECAST_CS_SKEW_TAIL_BETA:
+        skew_share = np.abs(skew_component) / (np.abs(skew_component) + group_std + 1e-12)
+        tail_share = np.abs(residual) / (np.abs(residual) + group_std + 1e-12)
+        residual_scale = np.clip(1.0 - FORECAST_CS_SKEW_TAIL_BETA * skew_share * tail_share, 0.0, 1.0)
         pred = pred - residual + residual * residual_scale
     return pred
 
