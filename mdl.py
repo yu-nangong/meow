@@ -1,4 +1,6 @@
 import os
+from types import SimpleNamespace
+
 import numpy as np
 from log import log
 
@@ -6,6 +8,8 @@ from log import log
 class MeowModel(object):
     def __init__(self, cacheDir):
         self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.001"))
+        self.interval_experts = max(int(os.environ.get("MEOW_INTERVAL_EXPERTS", "3")), 1)
+        self.interval_expert_blend = float(os.environ.get("MEOW_INTERVAL_EXPERT_BLEND", "0.5"))
         self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.0"))
         self.cs_alpha_mult = float(os.environ.get("MEOW_CS_ALPHA_MULT", "1.0"))
         self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "1.0"))
@@ -35,6 +39,9 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._expert_states = []
+        self._expert_coef = []
+        self._expert_intercept = []
 
     def reset(self):
         self._XtX = None
@@ -50,8 +57,12 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._expert_states = []
+        self._expert_coef = []
+        self._expert_intercept = []
 
     def partial_fit(self, xdf, ydf):
+        expert_codes = self._expert_bucket_codes(xdf)
         xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
         y = ydf.to_numpy(dtype=np.float64).ravel()
@@ -62,36 +73,22 @@ class MeowModel(object):
             self._Xty = np.zeros(self._n_features, dtype=np.float64)
             self._sum_x = np.zeros(self._n_features, dtype=np.float64)
             self._sum_x2 = np.zeros(self._n_features, dtype=np.float64)
-        self._XtX += x.T @ x
-        self._Xty += x.T @ y
-        self._sum_x += x.sum(axis=0)
-        self._sum_x2 += np.square(x).sum(axis=0)
-        self._sum_y += y.sum()
-        self._n_rows += len(y)
+            self._expert_states = [self._make_state(self._n_features) for _ in range(self.interval_experts)]
+        self._update_state(self, x, y)
+        if self.interval_experts > 1:
+            for bucket, state in enumerate(self._expert_states):
+                mask = expert_codes == bucket
+                if np.any(mask):
+                    self._update_state(state, x[mask], y[mask])
 
     def finalize_fit(self):
-        mean_x = self._sum_x / max(self._n_rows, 1)
-        var_x = self._sum_x2 / max(self._n_rows, 1) - np.square(mean_x)
-        scale_x = np.sqrt(np.maximum(var_x, 1e-12))
-        inv_scale = 1.0 / scale_x
-
-        centered_xtx = self._XtX - self._n_rows * np.outer(mean_x, mean_x)
-        centered_xty = self._Xty - mean_x * self._sum_y
-        ztz = centered_xtx * np.outer(inv_scale, inv_scale)
-        zty = centered_xty * inv_scale
-        ridge_diag = self._ridge_diag()
-
-        coef_scaled = np.linalg.solve(
-            ztz + np.diag(ridge_diag),
-            zty,
-        )
-        mean_y = self._sum_y / max(self._n_rows, 1)
-        coef = coef_scaled * inv_scale
-
-        self._mean_x = mean_x
-        self._scale_x = scale_x
-        self._coef = coef
-        self._intercept = float(mean_y - mean_x @ coef)
+        self._coef, self._intercept, self._mean_x, self._scale_x = self._solve_state(self)
+        self._expert_coef = []
+        self._expert_intercept = []
+        for state in self._expert_states:
+            coef, intercept, _, _ = self._solve_state(state, fallback_coef=self._coef, fallback_intercept=self._intercept)
+            self._expert_coef.append(coef)
+            self._expert_intercept.append(intercept)
         log.inf("Done fitting")
 
     def _ridge_diag(self):
@@ -121,9 +118,19 @@ class MeowModel(object):
         self.finalize_fit()
 
     def predict(self, xdf):
+        expert_codes = self._expert_bucket_codes(xdf)
         xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
-        return x @ self._coef + self._intercept
+        pred = x @ self._coef + self._intercept
+        if self.interval_experts <= 1:
+            return pred
+        expert_pred = pred.copy()
+        for bucket, (coef, intercept) in enumerate(zip(self._expert_coef, self._expert_intercept)):
+            mask = expert_codes == bucket
+            if np.any(mask):
+                expert_pred[mask] = x[mask] @ coef + intercept
+        blend = np.clip(self.interval_expert_blend, 0.0, 1.0)
+        return (1.0 - blend) * pred + blend * expert_pred
 
     def _select_columns(self, xdf):
         if not self.exclude_patterns:
@@ -143,6 +150,51 @@ class MeowModel(object):
         if self.exclude_patterns and any(pattern in name for pattern in self.exclude_patterns):
             return False
         return self._family_of(name) not in self.exclude_families
+
+    def _expert_bucket_codes(self, xdf):
+        if self.interval_experts <= 1 or "interval_frac_centered" not in xdf.columns:
+            return np.zeros(len(xdf), dtype=np.int64)
+        frac = np.clip(xdf["interval_frac_centered"].to_numpy(dtype=np.float64, copy=False) + 0.5, 0.0, 1.0 - 1e-12)
+        return np.minimum((frac * self.interval_experts).astype(np.int64), self.interval_experts - 1)
+
+    @staticmethod
+    def _make_state(n_features):
+        return SimpleNamespace(
+            _XtX=np.zeros((n_features, n_features), dtype=np.float64),
+            _Xty=np.zeros(n_features, dtype=np.float64),
+            _sum_x=np.zeros(n_features, dtype=np.float64),
+            _sum_x2=np.zeros(n_features, dtype=np.float64),
+            _sum_y=0.0,
+            _n_rows=0,
+        )
+
+    @staticmethod
+    def _update_state(state, x, y):
+        state._XtX += x.T @ x
+        state._Xty += x.T @ y
+        state._sum_x += x.sum(axis=0)
+        state._sum_x2 += np.square(x).sum(axis=0)
+        state._sum_y += y.sum()
+        state._n_rows += len(y)
+
+    def _solve_state(self, state, fallback_coef=None, fallback_intercept=None):
+        if state._n_rows <= max(self._n_features, 1):
+            if fallback_coef is not None and fallback_intercept is not None:
+                return fallback_coef.copy(), float(fallback_intercept), None, None
+        mean_x = state._sum_x / max(state._n_rows, 1)
+        var_x = state._sum_x2 / max(state._n_rows, 1) - np.square(mean_x)
+        scale_x = np.sqrt(np.maximum(var_x, 1e-12))
+        inv_scale = 1.0 / scale_x
+        centered_xtx = state._XtX - state._n_rows * np.outer(mean_x, mean_x)
+        centered_xty = state._Xty - mean_x * state._sum_y
+        ztz = centered_xtx * np.outer(inv_scale, inv_scale)
+        zty = centered_xty * inv_scale
+        ridge_diag = self._ridge_diag()
+        coef_scaled = np.linalg.solve(ztz + np.diag(ridge_diag), zty)
+        mean_y = state._sum_y / max(state._n_rows, 1)
+        coef = coef_scaled * inv_scale
+        intercept = float(mean_y - mean_x @ coef)
+        return coef, intercept, mean_x, scale_x
 
     @staticmethod
     def _family_of(name):
