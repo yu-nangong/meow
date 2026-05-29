@@ -109,10 +109,12 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
             FORECAST_CS_MEAN_SHRINK_MAX,
         )
     skew_component = group_mean - group_median
+    residual = pred - group_center
     pred = pred - shrink * group_center - FORECAST_CS_SKEW_SHRINK * skew_component
     if FORECAST_CS_SKEW_ATTENUATION_BETA:
         skew_share = np.abs(skew_component) / (np.abs(skew_component) + group_std + 1e-12)
-        pred = pred * np.clip(1.0 - FORECAST_CS_SKEW_ATTENUATION_BETA * skew_share, 0.0, 1.0)
+        residual_scale = np.clip(1.0 - FORECAST_CS_SKEW_ATTENUATION_BETA * skew_share, 0.0, 1.0)
+        pred = pred - residual + residual * residual_scale
     return pred
 
 
