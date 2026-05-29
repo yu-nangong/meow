@@ -24,7 +24,9 @@ FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADA
 FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.0"))
 FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.0"))
 FORECAST_CS_SKEW_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_TAIL_BETA", "0.0"))
-FORECAST_CS_MAD_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_TAIL_BETA", "0.1"))
+FORECAST_CS_MAD_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_TAIL_BETA", "0.0"))
+FORECAST_CS_MAD_CLIP_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_CLIP_BETA", "0.15"))
+FORECAST_CS_MAD_CLIP_THRESHOLD = float(os.environ.get("MEOW_FORECAST_CS_MAD_CLIP_THRESHOLD", "2.5"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -97,6 +99,7 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         and not FORECAST_CS_SKEW_ATTENUATION_BETA
         and not FORECAST_CS_SKEW_TAIL_BETA
         and not FORECAST_CS_MAD_TAIL_BETA
+        and not FORECAST_CS_MAD_CLIP_BETA
     ):
         return pred
     out = _group_forecast_stats(ydf, pred)
@@ -135,6 +138,14 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         tail_share = np.abs(residual) / (np.abs(residual) + group_mad + 1e-12)
         residual_scale = np.clip(1.0 - FORECAST_CS_MAD_TAIL_BETA * tail_share, 0.0, 1.0)
         pred = pred - residual + residual * residual_scale
+        residual = pred - group_center
+    if FORECAST_CS_MAD_CLIP_BETA:
+        mad_floor = np.maximum(group_mad, 1e-12)
+        clip_radius = FORECAST_CS_MAD_CLIP_THRESHOLD * mad_floor
+        residual_abs = np.abs(residual)
+        excess = np.maximum(residual_abs - clip_radius, 0.0)
+        clipped_abs = residual_abs - FORECAST_CS_MAD_CLIP_BETA * excess
+        pred = group_center + np.sign(residual) * clipped_abs
     return pred
 
 
