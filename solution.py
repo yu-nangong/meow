@@ -20,7 +20,8 @@ FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "
 LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "0") != "0"
 FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
-FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.05"))
+FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
+FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.05"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -82,13 +83,15 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
-    if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA:
+    if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA and not FORECAST_CS_SKEW_SHRINK:
         return pred
     out = _group_forecast_stats(ydf, pred)
+    group_mean = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
+    group_median = out["group_median"].to_numpy(dtype=np.float64, copy=False)
     if FORECAST_CS_CENTER_STAT == "median":
-        group_center = out["group_median"].to_numpy(dtype=np.float64, copy=False)
+        group_center = group_median
     else:
-        group_center = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
+        group_center = group_mean
     shrink = mean_shrink
     if FORECAST_CS_MEAN_ADAPTIVE_BETA:
         mean_abs = np.abs(group_center)
@@ -101,7 +104,8 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         )
     else:
         shrink = mean_shrink
-    return pred - shrink * group_center
+    skew_component = group_mean - group_median
+    return pred - shrink * group_center - FORECAST_CS_SKEW_SHRINK * skew_component
 
 
 def _fit_forecast_mean_shrink(
