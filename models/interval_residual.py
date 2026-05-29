@@ -11,7 +11,7 @@ class IntervalResidualRidge:
         self.alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_ALPHA", "0.25"))
         self.prior_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_PRIOR_ALPHA", "2.0"))
         self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.12"))
-        self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.5"))
+        self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.0"))
         self.use_base_pred_rank = os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK", "1") != "0"
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
