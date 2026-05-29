@@ -1,11 +1,14 @@
 import os
 import numpy as np
 from log import log
+from models.residual_mlp import ResidualMLPTrainer
 
 
 class MeowModel(object):
     def __init__(self, cacheDir):
         self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.001"))
+        self.enable_residual_mlp = os.environ.get("MEOW_ENABLE_RESIDUAL_MLP", "1") != "0"
+        self.residual_blend = float(os.environ.get("MEOW_RESIDUAL_BLEND", "1.0"))
         self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.0"))
         self.cs_alpha_mult = float(os.environ.get("MEOW_CS_ALPHA_MULT", "1.0"))
         self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "1.0"))
@@ -35,6 +38,7 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._residual_trainer = None
 
     def reset(self):
         self._XtX = None
@@ -50,6 +54,7 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._residual_trainer = None
 
     def partial_fit(self, xdf, ydf):
         xdf = self._select_columns(xdf)
@@ -94,6 +99,20 @@ class MeowModel(object):
         self._intercept = float(mean_y - mean_x @ coef)
         log.inf("Done fitting")
 
+    def start_residual_fit(self):
+        if not self.enable_residual_mlp:
+            return
+        self._residual_trainer = ResidualMLPTrainer(input_dim=self._n_features)
+
+    def partial_fit_residual(self, xdf, ydf):
+        if self._residual_trainer is None:
+            return
+        x = self._transform_inputs(xdf)
+        y = ydf.to_numpy(dtype=np.float32).ravel()
+        base_pred = self._predict_base_from_array(x).astype(np.float32, copy=False)
+        resid = y - base_pred
+        self._residual_trainer.fit_chunk(self._standardize_array(x), resid)
+
     def _ridge_diag(self):
         ridge_diag = np.full(self._n_features, self.alpha, dtype=np.float64)
         for idx, name in enumerate(self._feature_names):
@@ -121,9 +140,12 @@ class MeowModel(object):
         self.finalize_fit()
 
     def predict(self, xdf):
-        xdf = self._select_columns(xdf)
-        x = xdf.to_numpy(dtype=np.float64)
-        return x @ self._coef + self._intercept
+        x = self._transform_inputs(xdf)
+        pred = self._predict_base_from_array(x)
+        if self._residual_trainer is None or not self.residual_blend:
+            return pred
+        resid = self._residual_trainer.predict(self._standardize_array(x)).astype(np.float64, copy=False)
+        return pred + self.residual_blend * resid
 
     def _select_columns(self, xdf):
         if not self.exclude_patterns:
@@ -138,6 +160,16 @@ class MeowModel(object):
                 if self._keep_column(col)
             ]
         return xdf.loc[:, self._selected_columns]
+
+    def _transform_inputs(self, xdf):
+        xdf = self._select_columns(xdf)
+        return xdf.to_numpy(dtype=np.float64)
+
+    def _standardize_array(self, x):
+        return ((x - self._mean_x) / self._scale_x).astype(np.float32, copy=False)
+
+    def _predict_base_from_array(self, x):
+        return x @ self._coef + self._intercept
 
     def _keep_column(self, name):
         if self.exclude_patterns and any(pattern in name for pattern in self.exclude_patterns):
