@@ -14,6 +14,7 @@ import pandas as pd
 from data_io import iter_days, train_test_dates, verify_data_dir
 from feat import MeowFeatureGenerator
 from mdl import MeowModel
+from models.interval_residual import IntervalResidualRidge
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -148,6 +149,16 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
+    interval_residual = IntervalResidualRidge()
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - base_pred
+        interval_residual.partial_fit(xdf, resid)
+        del xdf, ydf, base_pred, resid
+    interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -155,7 +166,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        ydf.loc[:, "forecast"] = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = forecast + interval_residual.predict(xdf)
+        ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
