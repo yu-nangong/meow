@@ -23,7 +23,8 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.0"))
 FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.0"))
-FORECAST_CS_SKEW_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_TAIL_BETA", "0.1"))
+FORECAST_CS_SKEW_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_TAIL_BETA", "0.0"))
+FORECAST_CS_MAD_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_TAIL_BETA", "0.1"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -81,6 +82,10 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
     out["group_mean"] = grp.transform("mean")
     out["group_median"] = grp.transform("median")
     out["group_std"] = grp.transform("std").fillna(0.0)
+    out["abs_dev_median"] = (out["forecast"] - out["group_median"]).abs()
+    out["group_mad"] = (
+        out.groupby(["date", "interval"], sort=False)["abs_dev_median"].transform("median").fillna(0.0)
+    )
     return out
 
 
@@ -91,12 +96,14 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         and not FORECAST_CS_SKEW_SHRINK
         and not FORECAST_CS_SKEW_ATTENUATION_BETA
         and not FORECAST_CS_SKEW_TAIL_BETA
+        and not FORECAST_CS_MAD_TAIL_BETA
     ):
         return pred
     out = _group_forecast_stats(ydf, pred)
     group_mean = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
     group_median = out["group_median"].to_numpy(dtype=np.float64, copy=False)
     group_std = out["group_std"].to_numpy(dtype=np.float64, copy=False)
+    group_mad = out["group_mad"].to_numpy(dtype=np.float64, copy=False)
     if FORECAST_CS_CENTER_STAT == "median":
         group_center = group_median
     else:
@@ -122,6 +129,11 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
         skew_share = np.abs(skew_component) / (np.abs(skew_component) + group_std + 1e-12)
         tail_share = np.abs(residual) / (np.abs(residual) + group_std + 1e-12)
         residual_scale = np.clip(1.0 - FORECAST_CS_SKEW_TAIL_BETA * skew_share * tail_share, 0.0, 1.0)
+        pred = pred - residual + residual * residual_scale
+        residual = pred - group_center
+    if FORECAST_CS_MAD_TAIL_BETA:
+        tail_share = np.abs(residual) / (np.abs(residual) + group_mad + 1e-12)
+        residual_scale = np.clip(1.0 - FORECAST_CS_MAD_TAIL_BETA * tail_share, 0.0, 1.0)
         pred = pred - residual + residual * residual_scale
     return pred
 
