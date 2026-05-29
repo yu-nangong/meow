@@ -195,8 +195,10 @@ Go back to Step 2. Keep iterating. When you run out of obvious ideas, that's whe
 ## Tips
 - Template Ridge baseline ≈ 0.022 Pearson on test set.
 - Beat the template with better features and/or models (see REFERENCES.md).
-- Train in date chunks (`MEOW_N_CHUNKS=4`); avoid loading 123 days at once.
-- Optional deep models can live under models/; wire them in solution.py.
+- Train in date chunks (`MEOW_N_CHUNKS=8`); avoid loading 123 days at once.
+- **Score via `coral eval` only** — no local full-benchmark sweeps; heartbeats fire on official evals.
+- One change → one `coral eval`; read `.codex/skills/meow-resource-limits/SKILL.md`.
+- Optional deep models under `models/`; wire in `solution.py`.
 
 
 ## Ground Rules

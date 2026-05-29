@@ -16,11 +16,15 @@ class IntervalResidualRidge:
             ",".join(
                 [
                     "trade_imb_rank_cs",
+                    "flow_imb_rank_cs",
                     "high_gap_rank_cs",
                     "trade_vwad_gap_rank_cs",
                     "high_minus_low_rank_cs",
                     "low_gap_rank_cs",
                     "ret12_resid_rank_cs",
+                    "top_queue_share_imb_rank_cs",
+                    "depth_pressure_slope_rank_cs",
+                    "ob_imb19_rank_cs",
                 ]
             ),
         )
