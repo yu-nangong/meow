@@ -25,9 +25,10 @@ FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "
 FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.0"))
 FORECAST_CS_SKEW_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_TAIL_BETA", "0.0"))
 FORECAST_CS_MAD_TAIL_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_TAIL_BETA", "0.0"))
-FORECAST_CS_MAD_CLIP_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_CLIP_BETA", "0.15"))
+FORECAST_CS_MAD_CLIP_BETA = float(os.environ.get("MEOW_FORECAST_CS_MAD_CLIP_BETA", "0.0"))
 FORECAST_CS_MAD_CLIP_THRESHOLD = float(os.environ.get("MEOW_FORECAST_CS_MAD_CLIP_THRESHOLD", "2.5"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
+FORECAST_CS_CENTER_MAD_THRESHOLD = float(os.environ.get("MEOW_FORECAST_CS_CENTER_MAD_THRESHOLD", "1.0"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -120,6 +121,9 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
             0.0,
             FORECAST_CS_MEAN_SHRINK_MAX,
         )
+    if FORECAST_CS_CENTER_MAD_THRESHOLD > 0.0:
+        robust_center_strength = np.abs(group_center) / (group_mad + 1e-12)
+        shrink = np.where(robust_center_strength >= FORECAST_CS_CENTER_MAD_THRESHOLD, shrink, 0.0)
     skew_component = group_mean - group_median
     residual = pred - group_center
     pred = pred - shrink * group_center - FORECAST_CS_SKEW_SHRINK * skew_component
