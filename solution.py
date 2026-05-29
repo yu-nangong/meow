@@ -21,7 +21,8 @@ LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRI
 FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
-FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.05"))
+FORECAST_CS_SKEW_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_SKEW_SHRINK", "0.0"))
+FORECAST_CS_SKEW_ATTENUATION_BETA = float(os.environ.get("MEOW_FORECAST_CS_SKEW_ATTENUATION_BETA", "0.1"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -83,11 +84,17 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
-    if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA and not FORECAST_CS_SKEW_SHRINK:
+    if (
+        not mean_shrink
+        and not FORECAST_CS_MEAN_ADAPTIVE_BETA
+        and not FORECAST_CS_SKEW_SHRINK
+        and not FORECAST_CS_SKEW_ATTENUATION_BETA
+    ):
         return pred
     out = _group_forecast_stats(ydf, pred)
     group_mean = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
     group_median = out["group_median"].to_numpy(dtype=np.float64, copy=False)
+    group_std = out["group_std"].to_numpy(dtype=np.float64, copy=False)
     if FORECAST_CS_CENTER_STAT == "median":
         group_center = group_median
     else:
@@ -95,17 +102,18 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
     shrink = mean_shrink
     if FORECAST_CS_MEAN_ADAPTIVE_BETA:
         mean_abs = np.abs(group_center)
-        group_std = out["group_std"].to_numpy(dtype=np.float64, copy=False)
         common_mode_share = mean_abs / (mean_abs + group_std + 1e-12)
         shrink = np.clip(
             mean_shrink + FORECAST_CS_MEAN_ADAPTIVE_BETA * common_mode_share,
             0.0,
             FORECAST_CS_MEAN_SHRINK_MAX,
         )
-    else:
-        shrink = mean_shrink
     skew_component = group_mean - group_median
-    return pred - shrink * group_center - FORECAST_CS_SKEW_SHRINK * skew_component
+    pred = pred - shrink * group_center - FORECAST_CS_SKEW_SHRINK * skew_component
+    if FORECAST_CS_SKEW_ATTENUATION_BETA:
+        skew_share = np.abs(skew_component) / (np.abs(skew_component) + group_std + 1e-12)
+        pred = pred * np.clip(1.0 - FORECAST_CS_SKEW_ATTENUATION_BETA * skew_share, 0.0, 1.0)
+    return pred
 
 
 def _fit_forecast_mean_shrink(
