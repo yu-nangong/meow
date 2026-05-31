@@ -15,6 +15,7 @@ from feat import MeowFeatureGenerator
 from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
+from models.poly_features import PolyFeatureExpander
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 
@@ -120,7 +121,16 @@ def _fit_forecast_mean_shrink(
     return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
 
 
+
+
+def _apply_poly_features(xdf, poly_expander):
+    if poly_expander is None:
+        return xdf
+    return poly_expander.transform(xdf)
+
+
 def _create_base_model():
+
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
     return MeowModel(cacheDir=None)
@@ -130,6 +140,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
+    poly_expander = PolyFeatureExpander()
     model = _create_base_model()
     model.reset()
 
@@ -137,8 +148,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
-        model.partial_fit(xdf, ydf)
-        del xdf, ydf
+        xdf_poly = _apply_poly_features(xdf, poly_expander)
+        model.partial_fit(xdf_poly, ydf)
+        del xdf, xdf_poly, ydf
     model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
@@ -148,10 +160,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        xdf_poly = _apply_poly_features(xdf, poly_expander)
+        base_pred = _postprocess_forecast(ydf, model.predict(xdf_poly), forecast_cs_mean_shrink)
         resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - base_pred
-        interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
+        interval_residual.partial_fit(xdf_poly, resid, base_pred=base_pred)
+        del xdf, xdf_poly, ydf, base_pred, resid
     interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
@@ -160,10 +173,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        xdf_poly = _apply_poly_features(xdf, poly_expander)
+        forecast = _postprocess_forecast(ydf, model.predict(xdf_poly), forecast_cs_mean_shrink)
+        forecast = forecast + interval_residual.predict(xdf_poly, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
-        del xdf
+        del xdf, xdf_poly
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
 
