@@ -52,6 +52,8 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
         h5dir,
         os.environ.get("MEOW_DATA_DIR"),
         str(Path(__file__).resolve().parent / "data"),
+        str(Path("data").resolve()),
+        "/data/moew/data",
     ]
     last_error = None
     for candidate in candidates:
