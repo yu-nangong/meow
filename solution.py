@@ -1,6 +1,8 @@
 """
-MEOW workshop template: Ridge regression on 6 hand-crafted features.
-Agents may replace this with deeper models in models/ or extend training here.
+Online NN replacing 2-stage (base + interval residual).
+
+Single hidden layer neural network trained via online SGD.
+No data accumulation — processes chunks incrementally.
 """
 from __future__ import annotations
 
@@ -12,19 +14,9 @@ import pandas as pd
 
 from data_io import iter_days, train_test_dates, verify_data_dir
 from feat import MeowFeatureGenerator
-from mdl import MeowModel
-from models.interval_residual import IntervalResidualRidge
-from models.elasticnet_model import ElasticNetModel
-
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+from models.online_nn import OnlineNN
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
-FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
-LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "0") != "0"
-FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
-FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
-FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
-FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -55,82 +47,11 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
     return verify_data_dir()
 
 
-def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
-    out = pd.DataFrame(
-        {
-            "date": ydf.index.get_level_values("date"),
-            "interval": ydf.index.get_level_values("interval"),
-            "forecast": pred,
-        }
-    )
-    grp = out.groupby(["date", "interval"], sort=False)["forecast"]
-    out["group_mean"] = grp.transform("mean")
-    out["group_median"] = grp.transform("median")
-    out["group_std"] = grp.transform("std").fillna(0.0)
-    return out
-
-
-def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
-    if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA:
-        return pred
-    out = _group_forecast_stats(ydf, pred)
-    if FORECAST_CS_CENTER_STAT == "median":
-        group_center = out["group_median"].to_numpy(dtype=np.float64, copy=False)
-    else:
-        group_center = out["group_mean"].to_numpy(dtype=np.float64, copy=False)
-    shrink = mean_shrink
-    if FORECAST_CS_MEAN_ADAPTIVE_BETA:
-        mean_abs = np.abs(group_center)
-        group_std = out["group_std"].to_numpy(dtype=np.float64, copy=False)
-        common_mode_share = mean_abs / (mean_abs + group_std + 1e-12)
-        shrink = np.clip(
-            mean_shrink + FORECAST_CS_MEAN_ADAPTIVE_BETA * common_mode_share,
-            0.0,
-            FORECAST_CS_MEAN_SHRINK_MAX,
-        )
-    else:
-        shrink = mean_shrink
-    return pred - shrink * group_center
-
-
-def _fit_forecast_mean_shrink(
-    h5dir: str,
-    feat_gen: MeowFeatureGenerator,
-    model: MeowModel,
-    train_dates: List[int],
-) -> float:
-    if FORECAST_CS_MEAN_SHRINK_TAIL_DAYS > 0:
-        calib_dates = train_dates[-FORECAST_CS_MEAN_SHRINK_TAIL_DAYS :]
-    else:
-        calib_dates = train_dates
-    numer = 0.0
-    denom = 0.0
-    for chunk in _chunk_dates(calib_dates, N_CHUNKS):
-        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
-        pred = model.predict(xdf)
-        del xdf
-        group_mean = _group_forecast_stats(ydf, pred)["group_mean"].to_numpy(dtype=np.float64, copy=False)
-        err = pred - ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
-        numer += float(err @ group_mean)
-        denom += float(group_mean @ group_mean)
-    if denom <= 0.0:
-        return FORECAST_CS_MEAN_SHRINK
-    return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
-
-
-def _create_base_model():
-    if MODEL_TYPE == "elasticnet":
-        return ElasticNetModel(cacheDir=None)
-    return MeowModel(cacheDir=None)
-
-
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
-    model = _create_base_model()
+    model = OnlineNN()
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
@@ -140,19 +61,6 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, ydf)
         del xdf, ydf
     model.finalize_fit()
-    forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
-    if LEARN_FORECAST_CS_MEAN_SHRINK:
-        forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
-    interval_residual = IntervalResidualRidge()
-    for chunk in _chunk_dates(train_dates, N_CHUNKS):
-        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - base_pred
-        interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
-    interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -160,12 +68,10 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        forecast = model.predict(xdf)
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
 
     return _pearson_metrics(np.concatenate(y_parts), np.concatenate(p_parts))
-
