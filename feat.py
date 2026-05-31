@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from log import log
+import warnings
 
 
 class MeowFeatureGenerator(object):
@@ -23,7 +24,45 @@ class MeowFeatureGenerator(object):
         ]
         return cls._parse_feature_list_env("MEOW_NONLINEAR_TIME_FEATURES", default)
 
-    @classmethod
+    @staticmethod
+    def _get_raw_level_pairs():
+        """Return (name, transform, hdf5_col) pairs for raw-level cross-sectional features."""
+        return [
+            ("midpx_level", "rank", "midpx"),
+            ("lastpx_level", "rank", "lastpx"),
+            ("high_level", "rank", "high"),
+            ("low_level", "rank", "low"),
+            ("open_level", "rank", "open"),
+            ("tradeBuyQty_level", "rank", "tradeBuyQty"),
+            ("tradeSellQty_level", "rank", "tradeSellQty"),
+            ("tradeBuyTurnover_level", "rank", "tradeBuyTurnover"),
+            ("tradeSellTurnover_level", "rank", "tradeSellTurnover"),
+            ("buyVwad_level", "rank", "buyVwad"),
+            ("sellVwad_level", "rank", "sellVwad"),
+            ("bsize0_level", "rank", "bsize0"),
+            ("asize0_level", "rank", "asize0"),
+            ("addBuyQty_level", "rank", "addBuyQty"),
+            ("addSellQty_level", "rank", "addSellQty"),
+            ("cxlBuyQty_level", "rank", "cxlBuyQty"),
+            ("cxlSellQty_level", "rank", "cxlSellQty"),
+            ("nTradeBuy_level", "rank", "nTradeBuy"),
+            ("nTradeSell_level", "rank", "nTradeSell"),
+            ("nAddBuy_level", "rank", "nAddBuy"),
+            ("nAddSell_level", "rank", "nAddSell"),
+            ("nCxlBuy_level", "rank", "nCxlBuy"),
+            ("nCxlSell_level", "rank", "nCxlSell"),
+            ("bid0_level", "rank", "bid0"),
+            ("ask0_level", "rank", "ask0"),
+            ("midpx_zs", "zs", "midpx"),
+            ("lastpx_zs", "zs", "lastpx"),
+            ("buyVwad_zs", "zs", "buyVwad"),
+            ("sellVwad_zs", "zs", "sellVwad"),
+            ("tradeBuyQty_zs", "zs", "tradeBuyQty"),
+            ("tradeSellQty_zs", "zs", "tradeSellQty"),
+            ("bsize0_zs", "zs", "bsize0"),
+            ("asize0_zs", "zs", "asize0"),
+        ]
+
     def featureNames(cls):
         feature_names = [
             "ob_imb0",
@@ -132,6 +171,40 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
             "high_vs_trade_high_gap_rank_cs",
+            "midpx_level_rank_cs",
+            "lastpx_level_rank_cs",
+            "high_level_rank_cs",
+            "low_level_rank_cs",
+            "open_level_rank_cs",
+            "tradeBuyQty_level_rank_cs",
+            "tradeSellQty_level_rank_cs",
+            "tradeBuyTurnover_level_rank_cs",
+            "tradeSellTurnover_level_rank_cs",
+            "buyVwad_level_rank_cs",
+            "sellVwad_level_rank_cs",
+            "bsize0_level_rank_cs",
+            "asize0_level_rank_cs",
+            "addBuyQty_level_rank_cs",
+            "addSellQty_level_rank_cs",
+            "cxlBuyQty_level_rank_cs",
+            "cxlSellQty_level_rank_cs",
+            "nTradeBuy_level_rank_cs",
+            "nTradeSell_level_rank_cs",
+            "nAddBuy_level_rank_cs",
+            "nAddSell_level_rank_cs",
+            "nCxlBuy_level_rank_cs",
+            "nCxlSell_level_rank_cs",
+            "bid0_level_rank_cs",
+            "ask0_level_rank_cs",
+            "midpx_zs",
+            "lastpx_zs",
+            "buyVwad_zs",
+            "sellVwad_zs",
+            "tradeBuyQty_zs",
+            "tradeSellQty_zs",
+            "bsize0_zs",
+            "asize0_zs",
+
             "interval_frac_centered",
             "interval_u",
             "interval_frac_sq",
@@ -188,6 +261,7 @@ class MeowFeatureGenerator(object):
         self.cacheDir = cacheDir
         self.ycol = "fret12"
         self.mcols = ["symbol", "date", "interval"]
+        self._raw_level_pairs = self._get_raw_level_pairs()
 
     def genFeatures(self, df):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
@@ -296,6 +370,41 @@ class MeowFeatureGenerator(object):
         ].transform("mean")
         base_df.loc[:, "ret3_x_flow"] = base_df["ret3"] * base_df["flow_imb"]
         base_df.loc[:, "ret6_x_flow"] = base_df["ret6"] * base_df["flow_imb"]
+
+        # === Raw-level cross-sectional features from HDF5 columns ===
+        # Capture absolute magnitude/scale information orthogonal to existing ratio features.
+        # Type "rank": percentile rank within (date, interval) -> _rank_cs
+        # Type "zs": cross-sectional z-score -> _zs
+        rank_feats = []
+        zs_feats = []
+        raw_vals = {}
+        for name, tform, h5col in self._raw_level_pairs:
+            if h5col not in df.columns:
+                continue
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                v = df[h5col].to_numpy(dtype=np.float64, copy=False)
+                v = np.where(np.isfinite(v) & (v > 0), v, np.nan)
+            raw_vals[name] = v
+            if tform == "rank":
+                rank_feats.append(name)
+            else:
+                zs_feats.append(name)
+        if rank_feats:
+            rf = pd.DataFrame({n: raw_vals[n] for n in rank_feats}, index=df.index)
+            r_ranked = rf.groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
+            r_ranked.columns = [f"{n}_rank_cs" for n in rank_feats]
+            for col in r_ranked.columns:
+                base_df[col] = r_ranked[col].to_numpy(dtype=np.float32)
+        if zs_feats:
+            zf = pd.DataFrame({n: raw_vals[n] for n in zs_feats}, index=df.index)
+            grp = zf.groupby([df["date"], df["interval"]], sort=False)
+            z_means = grp.transform("mean")
+            z_stds = grp.transform("std").fillna(0.0).clip(lower=1e-8)
+            zs_out = (zf - z_means) / z_stds
+            zs_out.columns = [f"{n}" for n in zs_feats]
+            for col in zs_out.columns:
+                base_df[col] = zs_out[col].to_numpy(dtype=np.float32)
 
         cs_cols = [
             "trade_imb",
