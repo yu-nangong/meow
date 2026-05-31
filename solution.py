@@ -5,7 +5,6 @@ Agents may replace this with deeper models in models/ or extend training here.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -48,23 +47,8 @@ def _pearson_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]
 
 
 def _resolve_h5dir(h5dir: Optional[str]) -> str:
-    candidates = [
-        h5dir,
-        os.environ.get("MEOW_DATA_DIR"),
-        str(Path(__file__).resolve().parent / "data"),
-        str(Path("data").resolve()),
-        "/data/moew/data",
-    ]
-    last_error = None
-    for candidate in candidates:
-        if not candidate:
-            continue
-        try:
-            return verify_data_dir(candidate)
-        except FileNotFoundError as exc:
-            last_error = exc
-    if last_error is not None:
-        raise last_error
+    if h5dir:
+        return verify_data_dir(h5dir)
     return verify_data_dir()
 
 
