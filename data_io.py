@@ -9,20 +9,31 @@ from typing import Iterable, List, Optional
 import numpy as np
 import pandas as pd
 
-# Single physical copy: /data/moew/data/*.h5
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CANONICAL_DATA_DIR = REPO_ROOT / "data"
+def _find_canonical_data_dir() -> Path:
+    """Walk up from this file until we find data/*.h5 (moew project root)."""
+    here = Path(__file__).resolve().parent
+    for directory in (here, *here.parents):
+        data_dir = directory / "data"
+        if data_dir.is_dir() and any(data_dir.glob("*.h5")):
+            return data_dir
+    # Fallback: seed lives at moew/CORAL/examples/meow/seed
+    return Path(__file__).resolve().parents[4] / "data"
+
+
+CANONICAL_DATA_DIR = _find_canonical_data_dir()
 
 
 def default_h5dir() -> str:
-    """MEOW_DATA_DIR > repo data/ > ./data symlink in cwd."""
+    """MEOW_DATA_DIR > local data/ symlink > moew/data discovered via walk-up."""
     if os.environ.get("MEOW_DATA_DIR"):
         return os.environ["MEOW_DATA_DIR"]
-    if CANONICAL_DATA_DIR.is_dir():
-        return str(CANONICAL_DATA_DIR)
-    local = Path("data")
-    if local.is_dir():
-        return str(local.resolve())
+    for candidate in (
+        Path(__file__).resolve().parent / "data",
+        Path("data"),
+        CANONICAL_DATA_DIR,
+    ):
+        if candidate.is_dir() and any(candidate.glob("*.h5")):
+            return str(candidate.resolve())
     return str(CANONICAL_DATA_DIR)
 
 
@@ -30,7 +41,7 @@ def verify_data_dir(h5dir: str | None = None) -> str:
     path = Path(h5dir or default_h5dir())
     if not path.is_dir():
         raise FileNotFoundError(
-            f"MEOW data not found: {path}. Expected 144 *.h5 under /data/moew/data/"
+            f"MEOW data not found: {path}. Expected 144 *.h5 under {CANONICAL_DATA_DIR}/"
         )
     n = len(list(path.glob("*.h5")))
     if n == 0:
