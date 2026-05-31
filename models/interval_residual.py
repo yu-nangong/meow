@@ -22,6 +22,10 @@ class IntervalResidualRidge:
         self.base_pred_rank_tail_threshold = float(
             os.environ.get("MEOW_INTERVAL_RESIDUAL_BASE_PRED_RANK_TAIL_THRESHOLD", "0.18")
         )
+        raw_base_rank_interactions = os.environ.get(
+            "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTIONS",
+            "trade_imb_rank_cs,high_gap_rank_cs",
+        )
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
@@ -40,7 +44,11 @@ class IntervalResidualRidge:
             ),
         )
         self.feature_names = [name.strip() for name in raw_features.split(",") if name.strip()]
+        self.base_rank_interaction_features = [
+            name.strip() for name in raw_base_rank_interactions.split(",") if name.strip()
+        ]
         self._selected_columns = None
+        self._selected_base_rank_interactions = None
         self._global_xtx = None
         self._global_xty = None
         self._interval_xtx = None
@@ -104,6 +112,10 @@ class IntervalResidualRidge:
     def _select_features(self, xdf, base_pred=None):
         if self._selected_columns is None:
             self._selected_columns = [name for name in self.feature_names if name in xdf.columns]
+        if self._selected_base_rank_interactions is None:
+            self._selected_base_rank_interactions = [
+                name for name in self.base_rank_interaction_features if name in xdf.columns
+            ]
         parts = []
         if self._selected_columns:
             parts.append(xdf.loc[:, self._selected_columns].to_numpy(dtype=np.float64, copy=False))
@@ -117,6 +129,9 @@ class IntervalResidualRidge:
                     tail_threshold=self.base_pred_rank_tail_threshold,
                 )
             )
+            if self._selected_base_rank_interactions:
+                interaction_x = xdf.loc[:, self._selected_base_rank_interactions].to_numpy(dtype=np.float64, copy=False)
+                parts.append(interaction_x * base_rank_centered[:, None])
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
