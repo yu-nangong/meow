@@ -196,6 +196,22 @@ class MeowFeatureGenerator(object):
             "nCxlSell_level_rank_cs",
             "bid0_level_rank_cs",
             "ask0_level_rank_cs",
+            "delta_high_gap",
+            "delta_low_gap",
+            "delta_micro_dev",
+            "delta_trade_imb",
+            "delta_flow_imb",
+            "delta_trade_high_center_gap",
+            "delta_trade_vwad_gap",
+            "delta_trade_buy_high_gap",
+            "delta_trade_sell_high_gap",
+            "delta_high_minus_low",
+            "delta_spread",
+            "delta_high_vs_trade_high_gap",
+            "delta_vwad_center_dev",
+            "delta_trade_high_skew",
+            "delta_range_pos",
+            "delta_ret1",
             "midpx_zs",
             "lastpx_zs",
             "buyVwad_zs",
@@ -353,7 +369,6 @@ class MeowFeatureGenerator(object):
         features["ret6"] = sym_day["midpx"].pct_change(6)
         features["ret12"] = sym_day["midpx"].pct_change(12)
         features["ret24"] = sym_day["midpx"].pct_change(24)
-
         base_df = pd.DataFrame(features, index=df.index)
         base_sym_day = base_df.groupby([df["symbol"], df["date"]], sort=False)
         base_df.loc[:, "trade_imb_ema6"] = base_sym_day["trade_imb"].transform(
@@ -371,6 +386,17 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "ret3_x_flow"] = base_df["ret3"] * base_df["flow_imb"]
         base_df.loc[:, "ret6_x_flow"] = base_df["ret6"] * base_df["flow_imb"]
 
+        # === Delta features (change from t-1 to t within symbol) ===
+        # Capture short-term temporal dynamics: high residual autocorr (0.88) means ridge misses temporal structure.
+        delta_sources = [
+            "high_gap", "low_gap", "micro_dev", "trade_imb", "flow_imb",
+            "trade_high_center_gap", "trade_vwad_gap", "trade_buy_high_gap",
+            "trade_sell_high_gap", "high_minus_low", "spread",
+            "high_vs_trade_high_gap", "vwad_center_dev", "trade_high_skew",
+            "range_pos", "ret1",
+        ]
+        for src in delta_sources:
+            base_df.loc[:, f"delta_{src}"] = base_sym_day[src].diff(1)
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
         # Type "rank": percentile rank within (date, interval) -> _rank_cs
