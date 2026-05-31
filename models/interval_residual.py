@@ -13,16 +13,23 @@ class IntervalResidualRidge:
         self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.12"))
         self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.0"))
         self.use_base_pred_rank = os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK", "1") != "0"
+        self.use_base_pred_rank_tail = (
+            os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
+        )
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
                 [
                     "trade_imb_rank_cs",
+                    "flow_imb_rank_cs",
                     "high_gap_rank_cs",
                     "trade_vwad_gap_rank_cs",
                     "high_minus_low_rank_cs",
                     "low_gap_rank_cs",
                     "ret12_resid_rank_cs",
+                    "top_queue_share_imb_rank_cs",
+                    "depth_pressure_slope_rank_cs",
+                    "ob_imb19_rank_cs",
                 ]
             ),
         )
@@ -95,7 +102,13 @@ class IntervalResidualRidge:
         if self._selected_columns:
             parts.append(xdf.loc[:, self._selected_columns].to_numpy(dtype=np.float64, copy=False))
         if self.use_base_pred_rank and base_pred is not None:
-            parts.append(self._base_pred_rank_feature(xdf, base_pred))
+            parts.append(
+                self._base_pred_rank_features(
+                    xdf,
+                    base_pred,
+                    include_tail=self.use_base_pred_rank_tail,
+                )
+            )
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
@@ -139,12 +152,17 @@ class IntervalResidualRidge:
         return codes
 
     @staticmethod
-    def _base_pred_rank_feature(xdf, base_pred):
+    def _base_pred_rank_features(xdf, base_pred, include_tail):
         frame = xdf.index.to_frame(index=False)
         frame["base_pred"] = np.asarray(base_pred, dtype=np.float64).ravel()
         ranked = frame.groupby(["date", "interval"], sort=False)["base_pred"].rank(method="average", pct=True)
         centered = ranked.to_numpy(dtype=np.float64, copy=False) - 0.5
-        return centered[:, None]
+        parts = [centered[:, None]]
+        if include_tail:
+            parts.append((centered * np.abs(centered))[:, None])
+        if len(parts) == 1:
+            return parts[0]
+        return np.concatenate(parts, axis=1)
 
     def _smooth_neighbor_deltas(self):
         deltas = self._coef - self._global_coef[None, :]
