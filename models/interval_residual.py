@@ -25,6 +25,27 @@ class IntervalResidualRidge:
         self.base_pred_rank_tail_threshold = float(
             os.environ.get("MEOW_INTERVAL_RESIDUAL_BASE_PRED_RANK_TAIL_THRESHOLD", "0.18")
         )
+
+        # Pairwise interaction features — multiply top feature pairs
+        self.add_pairwise = os.environ.get("MEOW_INTERVAL_RESIDUAL_ADD_PAIRWISE", "1") != "0"
+        raw_pairs = os.environ.get(
+            "MEOW_INTERVAL_RESIDUAL_PAIRWISE_FEATURES",
+            "trade_imb_rank_cs,flow_imb_rank_cs;"
+            "trade_imb_rank_cs,micro_dev_rank_cs;"
+            "ret1_rank_cs,flow_imb_rank_cs;"
+            "spread_rank_cs,high_minus_low_rank_cs;"
+            "depth_pressure_slope_rank_cs,ob_imb0_rank_cs;"
+            "ret1_rank_cs,micro_dev_rank_cs;"
+            "high_minus_low_rank_cs,ob_imb0_rank_cs;"
+            "ret6_rank_cs,flow_imb_rank_cs",
+        )
+        # Parse pairwise feature pairs
+        self.pairwise_pairs = []
+        for pair_str in raw_pairs.split(";"):
+            pair = [name.strip() for name in pair_str.split(",") if name.strip()]
+            if len(pair) == 2:
+                self.pairwise_pairs.append(tuple(pair))
+
         raw_base_rank_interactions = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTIONS",
             "trade_imb_rank_cs,flow_imb_rank_cs,high_minus_low_rank_cs,midpx_level_rank_cs,lastpx_level_rank_cs,tradeBuyQty_level_rank_cs,tradeSellQty_level_rank_cs,bsize0_level_rank_cs,asize0_level_rank_cs,buyVwad_level_rank_cs,sellVwad_level_rank_cs,nTradeBuy_level_rank_cs,nTradeSell_level_rank_cs",
@@ -43,6 +64,7 @@ class IntervalResidualRidge:
         ]
         self._selected_columns = None
         self._selected_base_rank_interactions = None
+        self._selected_pairs = None
         self._global_xtx = None
         self._global_xty = None
         self._interval_xtx = None
@@ -118,6 +140,11 @@ class IntervalResidualRidge:
             self._selected_base_rank_interactions = [
                 name for name in self.base_rank_interaction_features if name in xdf.columns
             ]
+        if self._selected_pairs is None and self.pairwise_pairs:
+            self._selected_pairs = [(f1, f2) for f1, f2 in self.pairwise_pairs 
+                                      if f1 in xdf.columns and f2 in xdf.columns]
+            if not self._selected_pairs:
+                self.add_pairwise = False
         parts = []
         if self._selected_columns:
             parts.append(xdf.loc[:, self._selected_columns].to_numpy(dtype=np.float64, copy=False))
@@ -137,6 +164,15 @@ class IntervalResidualRidge:
                 parts.append(
                     (interaction_x[:, :, None] * interaction_weights[:, None, :]).reshape(len(xdf), -1)
                 )
+        if self.add_pairwise and self._selected_pairs:
+            pair_vals = []
+            for f1, f2 in self._selected_pairs:
+                if f1 in xdf.columns and f2 in xdf.columns:
+                    v1 = xdf[f1].to_numpy(dtype=np.float64, copy=False)
+                    v2 = xdf[f2].to_numpy(dtype=np.float64, copy=False)
+                    pair_vals.append(v1 * v2)
+            if pair_vals:
+                parts.append(np.column_stack(pair_vals))
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
