@@ -205,6 +205,16 @@ class MeowFeatureGenerator(object):
             "bsize0_zs",
             "asize0_zs",
 
+            "trade_imb_accel",
+            "flow_imb_accel",
+            "micro_dev_trend",
+            "ret1_trend",
+            "spread_z_6",
+            "micro_dev_z_6",
+            "trade_imb_z_6",
+            "trade_imb_drift",  # recent mean - long mean
+            "ret1_vol_6",  # rolling volatility of ret1
+            "ret3_vol_6",
             "interval_frac_centered",
             "interval_u",
             "interval_frac_sq",
@@ -370,6 +380,52 @@ class MeowFeatureGenerator(object):
         ].transform("mean")
         base_df.loc[:, "ret3_x_flow"] = base_df["ret3"] * base_df["flow_imb"]
         base_df.loc[:, "ret6_x_flow"] = base_df["ret6"] * base_df["flow_imb"]
+
+        # === Intra-stock-day temporal features ===
+        # These capture time-series dynamics that point-in-time cross-sectional features miss.
+        sym_day = base_df.groupby([df["symbol"], df["date"]], sort=False)
+
+        # Acceleration: first difference of key features (sign of change direction)
+        base_df.loc[:, "trade_imb_accel"] = sym_day["trade_imb"].diff(1)
+        base_df.loc[:, "flow_imb_accel"] = sym_day["flow_imb"].diff(1)
+
+        # Trend: signed magnitude of micro_dev (divergence persistence)
+        # Positive = bid-side pressure increasing over last 3 intervals
+        base_df.loc[:, "micro_dev_trend"] = sym_day["micro_dev"].transform(
+            lambda s: s.rolling(3, min_periods=1).mean() - s.rolling(6, min_periods=1).mean()
+        )
+
+        # ret1 trend: acceleration of short-term returns
+        base_df.loc[:, "ret1_trend"] = sym_day["ret1"].diff(1)
+
+        # Rolling z-score: how unusual is current value relative to recent stock-day history
+        def _rolling_z(series, window=6):
+            mean_ = series.rolling(window, min_periods=2).mean()
+            std_ = series.rolling(window, min_periods=2).std().clip(lower=1e-8)
+            return (series - mean_) / std_
+
+        base_df.loc[:, "spread_z_6"] = sym_day["spread"].transform(lambda s: _rolling_z(s, 6))
+        base_df.loc[:, "micro_dev_z_6"] = sym_day["micro_dev"].transform(lambda s: _rolling_z(s, 6))
+        base_df.loc[:, "trade_imb_z_6"] = sym_day["trade_imb"].transform(lambda s: _rolling_z(s, 6))
+
+        # Drift: recent mean (6 interval) vs longer mean (24 interval)
+        def _drift(series, short=6, long=24):
+            short_mean = series.rolling(short, min_periods=3).mean()
+            long_mean = series.rolling(long, min_periods=6).mean()
+            return short_mean - long_mean
+
+        base_df.loc[:, "trade_imb_drift"] = sym_day["trade_imb"].transform(
+            lambda s: _drift(s, 6, 24)
+        )
+
+        # Rolling volatility of returns
+        base_df.loc[:, "ret1_vol_6"] = sym_day["ret1"].transform(
+            lambda s: s.rolling(6, min_periods=3).std().clip(upper=1.0)
+        )
+        base_df.loc[:, "ret3_vol_6"] = sym_day["ret3"].transform(
+            lambda s: s.rolling(6, min_periods=3).std().clip(upper=1.0)
+        )
+
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
