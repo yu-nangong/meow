@@ -16,6 +16,10 @@ class IntervalResidualRidge:
         self.use_base_pred_rank_tail = (
             os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
         )
+        raw_base_rank_interactions = os.environ.get(
+            "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTIONS",
+            "trade_imb_rank_cs,high_gap_rank_cs",
+        )
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
@@ -34,7 +38,11 @@ class IntervalResidualRidge:
             ),
         )
         self.feature_names = [name.strip() for name in raw_features.split(",") if name.strip()]
+        self.base_rank_interaction_features = [
+            name.strip() for name in raw_base_rank_interactions.split(",") if name.strip()
+        ]
         self._selected_columns = None
+        self._selected_base_rank_interactions = None
         self._global_xtx = None
         self._global_xty = None
         self._interval_xtx = None
@@ -98,17 +106,24 @@ class IntervalResidualRidge:
     def _select_features(self, xdf, base_pred=None):
         if self._selected_columns is None:
             self._selected_columns = [name for name in self.feature_names if name in xdf.columns]
+        if self._selected_base_rank_interactions is None:
+            self._selected_base_rank_interactions = [
+                name for name in self.base_rank_interaction_features if name in xdf.columns
+            ]
         parts = []
         if self._selected_columns:
             parts.append(xdf.loc[:, self._selected_columns].to_numpy(dtype=np.float64, copy=False))
         if self.use_base_pred_rank and base_pred is not None:
+            base_rank_centered = self._base_pred_rank_centered(xdf, base_pred)
             parts.append(
                 self._base_pred_rank_features(
-                    xdf,
-                    base_pred,
+                    base_rank_centered,
                     include_tail=self.use_base_pred_rank_tail,
                 )
             )
+            if self._selected_base_rank_interactions:
+                interaction_x = xdf.loc[:, self._selected_base_rank_interactions].to_numpy(dtype=np.float64, copy=False)
+                parts.append(interaction_x * base_rank_centered[:, None])
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
@@ -152,11 +167,14 @@ class IntervalResidualRidge:
         return codes
 
     @staticmethod
-    def _base_pred_rank_features(xdf, base_pred, include_tail):
+    def _base_pred_rank_centered(xdf, base_pred):
         frame = xdf.index.to_frame(index=False)
         frame["base_pred"] = np.asarray(base_pred, dtype=np.float64).ravel()
         ranked = frame.groupby(["date", "interval"], sort=False)["base_pred"].rank(method="average", pct=True)
-        centered = ranked.to_numpy(dtype=np.float64, copy=False) - 0.5
+        return ranked.to_numpy(dtype=np.float64, copy=False) - 0.5
+
+    @staticmethod
+    def _base_pred_rank_features(centered, include_tail):
         parts = [centered[:, None]]
         if include_tail:
             parts.append((centered * np.abs(centered))[:, None])
