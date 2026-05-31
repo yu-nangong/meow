@@ -16,6 +16,9 @@ class IntervalResidualRidge:
         self.use_base_pred_rank_tail = (
             os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
         )
+        self.use_base_pred_rank_split_tails = (
+            os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_SPLIT_TAILS", "1") != "0"
+        )
         self.base_pred_rank_tail_threshold = float(
             os.environ.get("MEOW_INTERVAL_RESIDUAL_BASE_PRED_RANK_TAIL_THRESHOLD", "0.18")
         )
@@ -110,6 +113,7 @@ class IntervalResidualRidge:
                 self._base_pred_rank_features(
                     base_rank_centered,
                     include_tail=self.use_base_pred_rank_tail,
+                    split_tails=self.use_base_pred_rank_split_tails,
                     tail_threshold=self.base_pred_rank_tail_threshold,
                 )
             )
@@ -163,11 +167,17 @@ class IntervalResidualRidge:
         return ranked.to_numpy(dtype=np.float64, copy=False) - 0.5
 
     @staticmethod
-    def _base_pred_rank_features(centered, include_tail, tail_threshold):
+    def _base_pred_rank_features(centered, include_tail, split_tails, tail_threshold):
         parts = [centered[:, None]]
         if include_tail:
-            tail_excess = np.maximum(np.abs(centered) - tail_threshold, 0.0)
-            parts.append((centered * tail_excess)[:, None])
+            if split_tails:
+                upper_tail = np.maximum(centered - tail_threshold, 0.0)
+                lower_tail = np.maximum(-centered - tail_threshold, 0.0)
+                parts.append(upper_tail[:, None])
+                parts.append(lower_tail[:, None])
+            else:
+                tail_excess = np.maximum(np.abs(centered) - tail_threshold, 0.0)
+                parts.append((centered * tail_excess)[:, None])
         if len(parts) == 1:
             return parts[0]
         return np.concatenate(parts, axis=1)
