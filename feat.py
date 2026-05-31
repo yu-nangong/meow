@@ -130,6 +130,16 @@ class MeowFeatureGenerator(object):
             "trade_count_share",
             "ret3_x_flow",
             "ret6_x_flow",
+            "ret3_minus_ret1",
+            "ret6_minus_ret3",
+            "ret12_minus_ret6",
+            "ret6_vol",
+            "ret12_vol",
+            "ret24_vol",
+            "add_cxl_share",
+            "add_share",
+            "cxl_share",
+            "add_minus_cxl_share",
             "trade_imb_rank_cs",
             "flow_imb_rank_cs",
             "micro_dev_rank_cs",
@@ -371,6 +381,33 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "ret3_x_flow"] = base_df["ret3"] * base_df["flow_imb"]
         base_df.loc[:, "ret6_x_flow"] = base_df["ret6"] * base_df["flow_imb"]
 
+        # === Trend acceleration features (time-series momentum) ===
+        base_df.loc[:, "ret3_minus_ret1"] = base_df["ret3"] - base_df["ret1"]
+        base_df.loc[:, "ret6_minus_ret3"] = base_df["ret6"] - base_df["ret3"]
+        base_df.loc[:, "ret12_minus_ret6"] = base_df["ret12"] - base_df["ret6"]
+
+        # === Rolling volatility features (volatility regime) ===
+        eps = 1e-12
+        base_df.loc[:, "ret6_vol"] = base_sym_day["midpx"].transform(
+            lambda s: s.pct_change(1).rolling(6, min_periods=3).std()
+        )
+        base_df.loc[:, "ret12_vol"] = base_sym_day["midpx"].transform(
+            lambda s: s.pct_change(1).rolling(12, min_periods=6).std()
+        )
+        base_df.loc[:, "ret24_vol"] = base_sym_day["midpx"].transform(
+            lambda s: s.pct_change(1).rolling(24, min_periods=12).std()
+        )
+
+        # === Order arrival intensity features (activity regime) ===
+        total_events = (
+            df["nAddBuy"] + df["nAddSell"] + df["nCxlBuy"] + df["nCxlSell"]
+            + df["nTradeBuy"] + df["nTradeSell"]
+        ).clip(lower=eps)
+        base_df.loc[:, "add_cxl_share"] = (df["nAddBuy"] + df["nAddSell"] + df["nCxlBuy"] + df["nCxlSell"]) / total_events
+        base_df.loc[:, "add_share"] = (df["nAddBuy"] + df["nAddSell"]) / total_events
+        base_df.loc[:, "cxl_share"] = (df["nCxlBuy"] + df["nCxlSell"]) / total_events
+        base_df.loc[:, "add_minus_cxl_share"] = base_df["add_share"] - base_df["cxl_share"]
+
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
         # Type "rank": percentile rank within (date, interval) -> _rank_cs
@@ -466,6 +503,16 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap",
             "trade_high_skew",
             "high_vs_trade_high_gap",
+            "ret3_minus_ret1",
+            "ret6_minus_ret3",
+            "ret12_minus_ret6",
+            "ret6_vol",
+            "ret12_vol",
+            "ret24_vol",
+            "add_cxl_share",
+            "add_share",
+            "cxl_share",
+            "add_minus_cxl_share",
         ]
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
@@ -507,6 +554,11 @@ class MeowFeatureGenerator(object):
             "high_minus_low_rank_cs",
             "micro_dev_rank_cs",
             "buy_vwad_dev_rank_cs",
+            "ret3_minus_ret1_rank_cs",
+            "ret6_minus_ret3_rank_cs",
+            "ret6_vol_rank_cs",
+            "ret12_vol_rank_cs",
+            "add_cxl_share_rank_cs",
         ]
         time_interactions_df = rank_df[time_interactions].mul(time_df["interval_frac_centered"], axis=0)
         time_interactions_df.columns = [f"{col}_x_time" for col in time_interactions]
@@ -533,6 +585,11 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "micro_dev_rank_cs",
             "buy_vwad_dev_rank_cs",
+            "ret3_minus_ret1_rank_cs",
+            "ret6_minus_ret3_rank_cs",
+            "ret6_vol_rank_cs",
+            "ret12_vol_rank_cs",
+            "add_cxl_share_rank_cs",
         ]
         u_interactions_df = rank_df[u_interactions].mul(time_df["interval_u"], axis=0)
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
