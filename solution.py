@@ -14,7 +14,9 @@ from data_io import iter_days, train_test_dates, verify_data_dir
 from feat import MeowFeatureGenerator
 from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
+from models.gbrt_ridge import GbrtRidge
 
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
 LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "0") != "0"
@@ -117,11 +119,17 @@ def _fit_forecast_mean_shrink(
     return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
 
 
+def _create_model():
+    if MODEL_TYPE == "gbrt":
+        return GbrtRidge(cacheDir=None)
+    return MeowModel(cacheDir=None)
+
+
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
-    model = MeowModel(cacheDir=None)
+    model = _create_model()
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
