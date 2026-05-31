@@ -11,6 +11,9 @@ class IntervalResidualRidge:
         self.alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_ALPHA", "0.25"))
         self.prior_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_PRIOR_ALPHA", "2.0"))
         self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.12"))
+        self.blend_scale = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_SCALE", "0.5"))
+        self.blend_max_mult = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_MAX_MULT", "2.0"))
+        self.blend_min_mult = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_MIN_MULT", "0.4"))
         self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.0"))
         self.use_base_pred_rank = os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK", "1") != "0"
         self.use_base_pred_rank_tail = (
@@ -47,6 +50,7 @@ class IntervalResidualRidge:
         self._counts = None
         self._global_coef = None
         self._coef = None
+        self._interval_blend_weights = None
         self._interval_to_idx = {}
 
     def partial_fit(self, xdf, resid, base_pred=None):
@@ -81,6 +85,8 @@ class IntervalResidualRidge:
             lhs = self._interval_xtx[interval] + (self.alpha + self.prior_alpha) * eye
             rhs = self._interval_xty[interval] + self.prior_alpha * self._global_coef
             self._coef[interval] = np.linalg.solve(lhs, rhs)
+        # compute adaptive per-interval blend weights from training counts
+        self._interval_blend_weights = self._compute_blend_weights(n_intervals)
         if self.neighbor_alpha > 0.0 and n_intervals > 1:
             self._smooth_neighbor_deltas()
 
@@ -96,9 +102,14 @@ class IntervalResidualRidge:
         valid = idx >= 0
         if np.any(valid):
             pred[valid] = np.einsum("ij,ij->i", x[valid], self._coef[idx[valid]], optimize=True)
+            # use per-interval blend weights
+            pred[valid] = pred[valid] * self._interval_blend_weights[idx[valid]]
         if np.any(~valid) and self._global_coef is not None:
             pred[~valid] = x[~valid] @ self._global_coef
-        return self.blend * pred
+        # unseen intervals get the global blend
+        if np.any(~valid):
+            pred[~valid] = pred[~valid] * self.blend
+        return pred
 
     def _select_features(self, xdf, base_pred=None):
         if self._selected_columns is None:
@@ -215,3 +226,13 @@ class IntervalResidualRidge:
                 weight += self.neighbor_alpha
             smoothed[interval] = accum / weight
         self._coef = self._global_coef[None, :] + smoothed
+
+    def _compute_blend_weights(self, n_intervals):
+        """Compute per-interval blend weights proportional to sqrt(count / median count)."""
+        counts = self._counts[:n_intervals]
+        median_count = float(np.median(counts[counts > 0])) if np.any(counts > 0) else 1.0
+        ratio = np.sqrt(counts / np.maximum(median_count, 1.0))
+        ratio = np.clip(ratio, self.blend_min_mult, self.blend_max_mult)
+        # zero-count intervals get the global blend
+        ratio[counts == 0] = 1.0
+        return self.blend * ratio
