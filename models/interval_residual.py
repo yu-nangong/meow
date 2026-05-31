@@ -32,20 +32,7 @@ class IntervalResidualRidge:
         ).strip().lower()
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
-            ",".join(
-                [
-                    "trade_imb_rank_cs,flow_imb_rank_cs,high_minus_low_rank_cs",
-                    "flow_imb_rank_cs",
-                    "high_gap_rank_cs",
-                    "trade_vwad_gap_rank_cs",
-                    "high_minus_low_rank_cs",
-                    "low_gap_rank_cs",
-                    "ret12_resid_rank_cs",
-                    "top_queue_share_imb_rank_cs",
-                    "depth_pressure_slope_rank_cs",
-                    "ob_imb19_rank_cs",
-                ]
-            ),
+            "trade_imb_rank_cs,flow_imb_rank_cs,micro_dev_rank_cs,ret1_rank_cs,ret3_rank_cs,ret6_rank_cs,ret12_resid_rank_cs,turnover_imb_rank_cs,add_turn_imb_rank_cs,day_open_gap_rank_cs,trade_count_share_rank_cs,buy_vwad_dev_rank_cs,trade_vwad_gap_rank_cs,range_pos_rank_cs,last_mid_dev_rank_cs,ret24_rank_cs,ob_imb4_rank_cs,depth_pressure_04_rank_cs,ob_imb0_rank_cs,ob_imb9_rank_cs,ob_imb19_rank_cs,ob_imb_front_back_rank_cs,ob_imb_inner_outer_rank_cs,spread_rank_cs,ret12_rank_cs,sell_vwad_dev_rank_cs,depth_pressure_59_rank_cs,depth_pressure_1019_rank_cs,depth_pressure_slope_rank_cs,depth_pressure_curve_rank_cs,near_share_imb_rank_cs,top_queue_share_imb_rank_cs,high_gap_rank_cs,low_gap_rank_cs,high_minus_low_rank_cs,trade_buy_high_gap_rank_cs,trade_sell_high_gap_rank_cs,vwad_center_dev_rank_cs,trade_high_center_gap_rank_cs,trade_high_skew_rank_cs,high_vs_trade_high_gap_rank_cs",
         )
         self.feature_names = [name.strip() for name in raw_features.split(",") if name.strip()]
         self.base_rank_interaction_features = [
