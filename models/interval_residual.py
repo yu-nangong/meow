@@ -24,8 +24,12 @@ class IntervalResidualRidge:
         )
         raw_base_rank_interactions = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTIONS",
-            "trade_imb_rank_cs,high_gap_rank_cs",
+            "trade_imb_rank_cs",
         )
+        self.base_rank_interaction_mode = os.environ.get(
+            "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTION_MODE",
+            "split_tail",
+        ).strip().lower()
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
@@ -131,7 +135,10 @@ class IntervalResidualRidge:
             )
             if self._selected_base_rank_interactions:
                 interaction_x = xdf.loc[:, self._selected_base_rank_interactions].to_numpy(dtype=np.float64, copy=False)
-                parts.append(interaction_x * base_rank_centered[:, None])
+                interaction_weights = self._base_pred_rank_interaction_weights(base_rank_centered)
+                parts.append(
+                    (interaction_x[:, :, None] * interaction_weights[:, None, :]).reshape(len(xdf), -1)
+                )
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
@@ -196,6 +203,16 @@ class IntervalResidualRidge:
         if len(parts) == 1:
             return parts[0]
         return np.concatenate(parts, axis=1)
+
+    def _base_pred_rank_interaction_weights(self, centered):
+        if self.base_rank_interaction_mode == "centered":
+            return centered[:, None]
+        if self.base_rank_interaction_mode == "tail":
+            tail_excess = np.maximum(np.abs(centered) - self.base_pred_rank_tail_threshold, 0.0)
+            return (np.sign(centered) * tail_excess)[:, None]
+        upper_tail = np.maximum(centered - self.base_pred_rank_tail_threshold, 0.0)
+        lower_tail = np.maximum(-centered - self.base_pred_rank_tail_threshold, 0.0)
+        return np.column_stack([upper_tail, lower_tail])
 
     def _smooth_neighbor_deltas(self):
         deltas = self._coef - self._global_coef[None, :]
