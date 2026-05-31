@@ -17,7 +17,7 @@ class IntervalResidualRidge:
             os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
         )
         self.use_base_pred_rank_asym_tail = (
-            os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_ASYM_TAIL", "1") != "0"
+            os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_ASYM_TAIL", "0") != "0"
         )
         self.base_pred_rank_tail_threshold = float(
             os.environ.get("MEOW_INTERVAL_RESIDUAL_BASE_RANK_TAIL_THRESHOLD", "0.25")
