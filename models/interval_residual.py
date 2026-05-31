@@ -24,7 +24,7 @@ class IntervalResidualRidge:
         )
         raw_base_rank_interactions = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTIONS",
-            "trade_imb_rank_cs",
+            "trade_imb_rank_cs,flow_imb_rank_cs,high_minus_low_rank_cs",
         )
         self.base_rank_interaction_mode = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTION_MODE",
@@ -34,7 +34,7 @@ class IntervalResidualRidge:
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
                 [
-                    "trade_imb_rank_cs",
+                    "trade_imb_rank_cs,flow_imb_rank_cs,high_minus_low_rank_cs",
                     "flow_imb_rank_cs",
                     "high_gap_rank_cs",
                     "trade_vwad_gap_rank_cs",
