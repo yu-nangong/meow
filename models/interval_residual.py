@@ -43,6 +43,8 @@ class IntervalResidualRidge:
         ]
         self._selected_columns = None
         self._selected_base_rank_interactions = None
+        self._use_time_gated_interactions = os.environ.get('MEOW_INTERVAL_RESIDUAL_TIME_GATED', '1') != '0'
+        self._time_gate_alpha = float(os.environ.get('MEOW_INTERVAL_RESIDUAL_TIME_GATE_ALPHA', '0.5'))
         self._global_xtx = None
         self._global_xty = None
         self._interval_xtx = None
@@ -134,9 +136,15 @@ class IntervalResidualRidge:
             if self._selected_base_rank_interactions:
                 interaction_x = xdf.loc[:, self._selected_base_rank_interactions].to_numpy(dtype=np.float64, copy=False)
                 interaction_weights = self._base_pred_rank_interaction_weights(base_rank_centered)
-                parts.append(
-                    (interaction_x[:, :, None] * interaction_weights[:, None, :]).reshape(len(xdf), -1)
-                )
+                base_inter = (interaction_x[:, :, None] * interaction_weights[:, None, :]).reshape(len(xdf), -1)
+                parts.append(base_inter)
+                if self._use_time_gated_interactions and 'interval_frac_centered' in xdf.columns:
+                    interval_c = xdf['interval_frac_centered'].to_numpy(dtype=np.float64, copy=False)
+                    interval_u = np.abs(interval_c)
+                    base_rank_centered_u = base_rank_centered * (1.0 + self._time_gate_alpha * interval_u)
+                    gated_weights = self._base_pred_rank_interaction_weights(base_rank_centered_u)
+                    time_inter = (interaction_x[:, :, None] * gated_weights[:, None, :]).reshape(len(xdf), -1)
+                    parts.append(time_inter)
         if not parts:
             return np.zeros((len(xdf), 0), dtype=np.float64)
         if len(parts) == 1:
