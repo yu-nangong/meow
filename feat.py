@@ -255,6 +255,7 @@ class MeowFeatureGenerator(object):
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
+        feature_names.extend(['trade_imb_rank_cs_x_flow_imb_rank_cs', 'trade_imb_rank_cs_x_high_gap_rank_cs', 'trade_imb_rank_cs_x_high_minus_low_rank_cs', 'flow_imb_rank_cs_x_high_gap_rank_cs', 'flow_imb_rank_cs_x_high_minus_low_rank_cs', 'high_gap_rank_cs_x_high_minus_low_rank_cs'])
         return feature_names
 
     def __init__(self, cacheDir):
@@ -549,6 +550,16 @@ class MeowFeatureGenerator(object):
             time_sq_interactions_df = pd.DataFrame(index=df.index)
             u_sq_interactions_df = pd.DataFrame(index=df.index)
 
+        # Curated pairwise rank interactions (4 top features -> 6 interactions)
+        pairwise_dfs = []
+        pairwise_dfs.append(rank_df['trade_imb_rank_cs'].mul(rank_df['flow_imb_rank_cs']).to_frame('trade_imb_rank_cs_x_flow_imb_rank_cs'))
+        pairwise_dfs.append(rank_df['trade_imb_rank_cs'].mul(rank_df['high_gap_rank_cs']).to_frame('trade_imb_rank_cs_x_high_gap_rank_cs'))
+        pairwise_dfs.append(rank_df['trade_imb_rank_cs'].mul(rank_df['high_minus_low_rank_cs']).to_frame('trade_imb_rank_cs_x_high_minus_low_rank_cs'))
+        pairwise_dfs.append(rank_df['flow_imb_rank_cs'].mul(rank_df['high_gap_rank_cs']).to_frame('flow_imb_rank_cs_x_high_gap_rank_cs'))
+        pairwise_dfs.append(rank_df['flow_imb_rank_cs'].mul(rank_df['high_minus_low_rank_cs']).to_frame('flow_imb_rank_cs_x_high_minus_low_rank_cs'))
+        pairwise_dfs.append(rank_df['high_gap_rank_cs'].mul(rank_df['high_minus_low_rank_cs']).to_frame('high_gap_rank_cs_x_high_minus_low_rank_cs'))
+        pairwise_interactions_df = pd.concat(pairwise_dfs, axis=1)
+
         feat_df = pd.concat(
             [
                 base_df,
@@ -559,6 +570,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                pairwise_interactions_df,
             ],
             axis=1,
         ).astype(np.float32)
