@@ -14,6 +14,7 @@ from data_io import iter_days, train_test_dates, verify_data_dir
 from feat import MeowFeatureGenerator
 from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
+from models.mlp_ridge import TorchRidgeBase
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -23,13 +24,16 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
+# Model selection: "ridge" (default) or "mlp"
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
     if not dates:
         return []
     n_chunks = min(n_chunks, len(dates))
     size = (len(dates) + n_chunks - 1) // n_chunks
-    return [dates[i : i + size] for i in range(0, len(dates), size)]
+    return [dates[i : i + size] for i in range(0, len(dates), n_chunks)]
 
 
 def _pearson_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
@@ -97,7 +101,7 @@ def _fit_forecast_mean_shrink(
     train_dates: List[int],
 ) -> float:
     if FORECAST_CS_MEAN_SHRINK_TAIL_DAYS > 0:
-        calib_dates = train_dates[-FORECAST_CS_MEAN_SHRINK_TAIL_DAYS :]
+        calib_dates = train_dates[-FORECAST_CS_MEAN_SHRINK_TAIL_DAYS:]
     else:
         calib_dates = train_dates
     numer = 0.0
@@ -121,7 +125,12 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
-    model = MeowModel(cacheDir=None)
+    
+    # Choose base model
+    if MODEL_TYPE == "mlp":
+        model = TorchRidgeBase(cache_dir=None)
+    else:
+        model = MeowModel(cacheDir=None)
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
@@ -131,9 +140,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, ydf)
         del xdf, ydf
     model.finalize_fit()
+
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
+
     interval_residual = IntervalResidualRidge()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
