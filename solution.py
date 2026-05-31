@@ -116,18 +116,36 @@ def _fit_forecast_mean_shrink(
         return FORECAST_CS_MEAN_SHRINK
     return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
 
+def _cs_rank_transform(ydf: pd.DataFrame) -> np.ndarray:
+    """Transform fret12 to within-(date,interval) percentile ranks, scaled to [-1,1]."""
+    fret = ydf["fret12"].to_numpy(dtype=np.float64, copy=True)
+    frame = ydf.index.to_frame(index=False)
+    frame["fret12"] = fret
+    ranked = frame.groupby(["date", "interval"], sort=False)["fret12"].rank(pct=True)
+    return (ranked.to_numpy(dtype=np.float64, copy=False) - 0.5) * 2.0
+
+
+USE_CS_RANK_TARGET = os.environ.get("MEOW_CS_RANK_TARGET", "0") != "0"
+
+
+
 
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = MeowModel(cacheDir=None)
+    if USE_CS_RANK_TARGET:
+        os.environ.pop("MEOW_EXCLUDE_FAMILIES", None)
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
+        if USE_CS_RANK_TARGET:
+            ydf = ydf.copy()
+            ydf["fret12"] = _cs_rank_transform(ydf)
         model.partial_fit(xdf, ydf)
         del xdf, ydf
     model.finalize_fit()
@@ -141,9 +159,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - base_pred
-        interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
+        if not USE_CS_RANK_TARGET:
+            interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
-    interval_residual.finalize_fit()
+    if not USE_CS_RANK_TARGET:
+        interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -152,7 +172,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        if not USE_CS_RANK_TARGET:
+            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
