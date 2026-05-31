@@ -16,6 +16,12 @@ class IntervalResidualRidge:
         self.use_base_pred_rank_tail = (
             os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
         )
+        self.use_base_pred_rank_asym_tail = (
+            os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_ASYM_TAIL", "1") != "0"
+        )
+        self.base_pred_rank_tail_threshold = float(
+            os.environ.get("MEOW_INTERVAL_RESIDUAL_BASE_RANK_TAIL_THRESHOLD", "0.25")
+        )
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
             ",".join(
@@ -151,15 +157,19 @@ class IntervalResidualRidge:
         self._ensure_capacity(next_idx, n_features)
         return codes
 
-    @staticmethod
-    def _base_pred_rank_features(xdf, base_pred, include_tail):
+    def _base_pred_rank_features(self, xdf, base_pred, include_tail):
         frame = xdf.index.to_frame(index=False)
         frame["base_pred"] = np.asarray(base_pred, dtype=np.float64).ravel()
         ranked = frame.groupby(["date", "interval"], sort=False)["base_pred"].rank(method="average", pct=True)
         centered = ranked.to_numpy(dtype=np.float64, copy=False) - 0.5
         parts = [centered[:, None]]
         if include_tail:
-            parts.append((centered * np.abs(centered))[:, None])
+            if self.use_base_pred_rank_asym_tail:
+                parts.append(np.maximum(centered - self.base_pred_rank_tail_threshold, 0.0)[:, None])
+                parts.append(np.maximum(-centered - self.base_pred_rank_tail_threshold, 0.0)[:, None])
+            else:
+                tail_mag = np.maximum(np.abs(centered) - self.base_pred_rank_tail_threshold, 0.0)
+                parts.append((np.sign(centered) * tail_mag)[:, None])
         if len(parts) == 1:
             return parts[0]
         return np.concatenate(parts, axis=1)
