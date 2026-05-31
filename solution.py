@@ -17,6 +17,12 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.rks_features import RKSFeatureGenerator
 
+try:
+    from models.ridge_ensemble import RidgeEnsemble
+    _HAS_ENSEMBLE = True
+except Exception:
+    _HAS_ENSEMBLE = False
+
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
@@ -122,15 +128,22 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
-    if MODEL_TYPE == "elasticnet":
+    model_type = MODEL_TYPE
+    if model_type == "ensemble":
+        if _HAS_ENSEMBLE:
+            return RidgeEnsemble(cacheDir=None)
+        import warnings; warnings.warn("RidgeEnsemble not available, fallback to MeowModel")
+        return MeowModel(cacheDir=None)
+    if model_type == "elasticnet":
         return ElasticNetModel(cacheDir=None)
-    if MODEL_TYPE == "rks":
+    if model_type == "rks":
+        return ElasticNetModel(cacheDir=None)
+    if model_type == "ridge":
         return ElasticNetModel(cacheDir=None)
     return MeowModel(cacheDir=None)
 
 
-def _add_rks_features(xdf: pd.DataFrame, rks: RKSFeatureGenerator | None) -> pd.DataFrame:
-    """Append RKS nonlinear features to the feature matrix."""
+def _add_rks_features(xdf, rks):
     if rks is None:
         return xdf
     x_base = xdf.to_numpy(dtype=np.float64, copy=False)
