@@ -255,6 +255,21 @@ class MeowFeatureGenerator(object):
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
+
+        # Always-on nonlinear features (no env-var gating)
+        _SQUARE_FEATURES = ["ob_imb0", "spread", "micro_dev", "depth_pressure_slope",
+                            "high_minus_low", "vwad_center_dev"]
+        _INTERACTION_PAIRS = [
+            ("ob_imb0", "spread"),
+            ("ob_imb0", "depth_pressure_04"),
+            ("micro_dev", "spread"),
+            ("depth_pressure_slope", "trade_imb"),
+            ("high_minus_low", "turnover_imb"),
+            ("ob_imb0", "high_minus_low"),
+            ("spread", "high_minus_low"),
+        ]
+        feature_names.extend(f"{f}_sq" for f in _SQUARE_FEATURES)
+        feature_names.extend(f"{a}_x_{b}" for a, b in _INTERACTION_PAIRS)
         return feature_names
 
     def __init__(self, cacheDir):
@@ -549,6 +564,36 @@ class MeowFeatureGenerator(object):
             time_sq_interactions_df = pd.DataFrame(index=df.index)
             u_sq_interactions_df = pd.DataFrame(index=df.index)
 
+        # Always-on nonlinear features: squares + targeted interactions
+        _SQUARE_FEATURES = ["ob_imb0", "spread", "micro_dev", "depth_pressure_slope",
+                            "high_minus_low", "vwad_center_dev"]
+        _INTERACTION_PAIRS = [
+            ("ob_imb0", "spread"),
+            ("ob_imb0", "depth_pressure_04"),
+            ("micro_dev", "spread"),
+            ("depth_pressure_slope", "trade_imb"),
+            ("high_minus_low", "turnover_imb"),
+            ("ob_imb0", "high_minus_low"),
+            ("spread", "high_minus_low"),
+        ]
+        nl_parts = []
+        sq_data = {}
+        for f in _SQUARE_FEATURES:
+            if f in base_df.columns:
+                arr = base_df[f].to_numpy(dtype=np.float64, copy=False)
+                sq_data[f"{f}_sq"] = arr * arr
+        if sq_data:
+            nl_parts.append(pd.DataFrame(sq_data, index=df.index))
+        int_data = {}
+        for a, b in _INTERACTION_PAIRS:
+            if a in base_df.columns and b in base_df.columns:
+                arr_a = base_df[a].to_numpy(dtype=np.float64, copy=False)
+                arr_b = base_df[b].to_numpy(dtype=np.float64, copy=False)
+                int_data[f"{a}_x_{b}"] = arr_a * arr_b
+        if int_data:
+            nl_parts.append(pd.DataFrame(int_data, index=df.index))
+        nonlinear_df = pd.concat(nl_parts, axis=1) if nl_parts else pd.DataFrame(index=df.index)
+
         feat_df = pd.concat(
             [
                 base_df,
@@ -559,6 +604,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                nonlinear_df,
             ],
             axis=1,
         ).astype(np.float32)
