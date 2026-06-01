@@ -91,6 +91,15 @@ class MeowFeatureGenerator(object):
             "micro_dev_x_ret6",
             "ob0_x_ob19",
             "trade_imb_x_ret1",
+            "trade_imb_roll_z12",
+            "flow_imb_roll_z12",
+            "ob_imb0_roll_z12",
+            "micro_dev_roll_z12",
+            "ret1_roll_z12",
+            "ret6_roll_z12",
+            "trade_imb_delta6",
+            "flow_imb_delta6",
+            "ret1_delta6",
             "ret12_resid",
             "trade_imb_cs",
             "micro_dev_cs",
@@ -375,6 +384,22 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "ret12_resid"] = base_df["ret12"] - base_df.groupby([df["date"], df["interval"]], sort=False)[
             "ret12"
         ].transform("mean")
+
+        # === Stock-level temporal dynamics: rolling z-score and delta features ===
+        roll_z_cols = ["trade_imb", "flow_imb", "ob_imb0", "micro_dev", "ret1", "ret6"]
+        for col in roll_z_cols:
+            roll_mean = base_sym_day[col].transform(
+                lambda s: s.rolling(window=12, min_periods=1).mean()
+            )
+            roll_std = base_sym_day[col].transform(
+                lambda s: s.rolling(window=12, min_periods=1).std()
+            )
+            base_df.loc[:, f"{col}_roll_z12"] = (base_df[col] - roll_mean) / (roll_std + 1e-8)
+        delta_cols = ["trade_imb", "flow_imb", "ret1"]
+        for col in delta_cols:
+            base_df.loc[:, f"{col}_delta6"] = base_sym_day[col].transform(
+                lambda s: s - s.shift(6)
+            )
         base_df.loc[:, "ret3_x_flow"] = base_df["ret3"] * base_df["flow_imb"]
         base_df.loc[:, "ret6_x_flow"] = base_df["ret6"] * base_df["flow_imb"]
 
