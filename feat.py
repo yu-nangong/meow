@@ -24,6 +24,24 @@ class MeowFeatureGenerator(object):
         ]
         return cls._parse_feature_list_env("MEOW_NONLINEAR_TIME_FEATURES", default)
 
+    @classmethod
+    def _tail_hinge_features(cls):
+        default = [
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "micro_dev_rank_cs",
+            "ret1_rank_cs",
+            "high_gap_rank_cs",
+            "high_minus_low_rank_cs",
+            "midpx_level_rank_cs",
+            "bsize0_level_rank_cs",
+        ]
+        return cls._parse_feature_list_env("MEOW_TAIL_HINGE_FEATURES", default)
+
+    @staticmethod
+    def _tail_hinge_threshold():
+        return float(os.environ.get("MEOW_TAIL_HINGE_THRESHOLD", "0.20"))
+
     @staticmethod
     def _get_raw_level_pairs():
         """Return (name, transform, hdf5_col) pairs for raw-level cross-sectional features."""
@@ -255,6 +273,9 @@ class MeowFeatureGenerator(object):
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
+        tail_hinge_features = cls._tail_hinge_features()
+        feature_names.extend(f"{col}_tail_pos" for col in tail_hinge_features)
+        feature_names.extend(f"{col}_tail_neg" for col in tail_hinge_features)
         return feature_names
 
     def __init__(self, cacheDir):
@@ -549,6 +570,18 @@ class MeowFeatureGenerator(object):
             time_sq_interactions_df = pd.DataFrame(index=df.index)
             u_sq_interactions_df = pd.DataFrame(index=df.index)
 
+        tail_hinge_threshold = self._tail_hinge_threshold()
+        tail_hinge_cols = [col for col in self._tail_hinge_features() if col in rank_df.columns]
+        if tail_hinge_cols:
+            tail_hinge_src = rank_df[tail_hinge_cols]
+            tail_hinge_pos = (tail_hinge_src - tail_hinge_threshold).clip(lower=0.0)
+            tail_hinge_pos.columns = [f"{col}_tail_pos" for col in tail_hinge_cols]
+            tail_hinge_neg = (-tail_hinge_src - tail_hinge_threshold).clip(lower=0.0)
+            tail_hinge_neg.columns = [f"{col}_tail_neg" for col in tail_hinge_cols]
+        else:
+            tail_hinge_pos = pd.DataFrame(index=df.index)
+            tail_hinge_neg = pd.DataFrame(index=df.index)
+
         feat_df = pd.concat(
             [
                 base_df,
@@ -559,6 +592,8 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                tail_hinge_pos,
+                tail_hinge_neg,
             ],
             axis=1,
         ).astype(np.float32)
