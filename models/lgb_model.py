@@ -28,14 +28,16 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
-        # Prune only the densest price-like raw-level rank columns by default.
-        # Keep queue/flow level ranks and all z-scores available to the tree arm.
+        # Prune smooth price-location variants by default. Keep queue/flow level
+        # ranks and z-scores available because they may encode nonlinear state
+        # that the tree arm can still threshold usefully.
         self.exclude_patterns = tuple(
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
                 "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
-                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
+                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,"
+                "ask0_level_rank_cs,midpx_zs,lastpx_zs,buyVwad_zs,sellVwad_zs",
             ).split(",")
             if pattern.strip()
         )
