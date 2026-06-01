@@ -92,6 +92,12 @@ class MeowFeatureGenerator(object):
             "ob0_x_ob19",
             "trade_imb_x_ret1",
             "ret12_resid",
+            "spread0",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
+            "spread_curve",
             "trade_imb_cs",
             "micro_dev_cs",
             "ret1_cs",
@@ -286,6 +292,17 @@ class MeowFeatureGenerator(object):
         features["trade_imb"] = (df["tradeBuyQty"] - df["tradeSellQty"]) / (
             df["tradeBuyQty"] + df["tradeSellQty"] + eps
         )
+        # Multi-level spread: price-based depth of liquidity at different LOB levels
+        spread0 = (df["ask0"] - df["bid0"]) / (df["midpx"] + eps)
+        spread4 = (df["ask4"] - df["bid4"]) / (df["midpx"] + eps)
+        spread9 = (df["ask9"] - df["bid9"]) / (df["midpx"] + eps)
+        spread19 = (df["ask19"] - df["bid19"]) / (df["midpx"] + eps)
+        features["spread0"] = spread0
+        features["spread4"] = spread4
+        features["spread9"] = spread9
+        features["spread19"] = spread19
+        features["spread_slope"] = spread19 - spread0
+        features["spread_curve"] = spread9 - 0.5 * (spread4 + spread19)
         features["turnover_imb"] = (df["tradeBuyTurnover"] - df["tradeSellTurnover"]) / (
             df["tradeBuyTurnover"] + df["tradeSellTurnover"] + eps
         )
@@ -427,6 +444,12 @@ class MeowFeatureGenerator(object):
             "ret6",
             "ret12",
             "ret12_resid",
+            "spread0",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
+            "spread_curve",
             "spread",
             "high_gap",
             "trade_buy_high_gap",
@@ -445,6 +468,12 @@ class MeowFeatureGenerator(object):
             "ret3",
             "ret6",
             "ret12_resid",
+            "spread0",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
+            "spread_curve",
             "turnover_imb",
             "add_turn_imb",
             "day_open_gap",
