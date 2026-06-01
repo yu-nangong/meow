@@ -14,6 +14,8 @@ class LGBModel:
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
+        self.boosting_type = os.environ.get("MEOW_LGB_BOOSTING_TYPE", "dart")
+        self.drop_rate = float(os.environ.get("MEOW_LGB_DROP_RATE", "0.1"))
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
@@ -71,12 +73,12 @@ class LGBModel:
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
         params = dict(
-            boosting_type="rf" if self.extra_trees else "gbdt",
+            boosting_type="rf" if self.extra_trees else self.boosting_type,
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
             n_estimators=self.n_estimators,
             subsample=self.subsample,
-            subsample_freq=1,
+            subsample_freq=1 if self.boosting_type != "dart" else 0,
             colsample_bytree=self.colsample_bytree,
             min_child_samples=self.min_child_samples,
             reg_lambda=self.reg_lambda,
@@ -84,6 +86,8 @@ class LGBModel:
             random_state=42,
             n_jobs=1,  # single-thread to avoid grader memory pressure
         )
+        if self.boosting_type == "dart" and not self.extra_trees:
+            params["drop_rate"] = self.drop_rate
         train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
         self._model = lgb.train(
             params,
