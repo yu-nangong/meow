@@ -17,6 +17,7 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.blend_model import BlendModel
+from models.torch_model import TorchModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -145,6 +146,8 @@ def _create_base_model():
         return LGBModel()
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
+    if MODEL_TYPE == "torch":
+        return TorchModel()
     return MeowModel(cacheDir=None)
 
 
