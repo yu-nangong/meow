@@ -93,6 +93,8 @@ class MeowFeatureGenerator(object):
             "micro_dev_roll_z12",
             "ret1_roll_z12",
             "ret6_roll_z12",
+            "ret1_roll_vol12",
+            "ret6_roll_vol12",
             "trade_imb_delta6",
             "flow_imb_delta6",
             "ret1_delta6",
@@ -432,6 +434,14 @@ class MeowFeatureGenerator(object):
             base_df.loc[:, f"{col}_roll_z24"] = (base_df[col] - roll_mean24) / (roll_std24 + 1e-8)
         for col in delta_cols:
             base_df.loc[:, f"{col}_delta3"] = base_sym_day[col].transform(
+ 
+        # === Rolling return volatility: capture stock-level regime shifts ===
+        base_df.loc[:, "ret1_roll_vol12"] = base_sym_day["ret1"].transform(
+            lambda s: s.rolling(window=12, min_periods=1).std()
+        )
+        base_df.loc[:, "ret6_roll_vol12"] = base_sym_day["ret6"].transform(
+            lambda s: s.rolling(window=12, min_periods=1).std()
+        )
                 lambda s: s - s.shift(3)
             )
 
