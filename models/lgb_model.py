@@ -18,6 +18,7 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
+        self.objective = os.environ.get("MEOW_LGB_OBJECTIVE", "regression_l1").strip()
         # Column families to exclude (matching ridge's exclude_families default)
         self.exclude_families = {
             f.strip()
@@ -71,6 +72,7 @@ class LGBModel:
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
         params = dict(
+            objective=self.objective,
             boosting_type="rf" if self.extra_trees else "gbdt",
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
