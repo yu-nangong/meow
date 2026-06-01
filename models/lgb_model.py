@@ -18,10 +18,14 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
-        # Column families to exclude (matching ridge's exclude_families default)
+        # Keep tree inputs narrower than ridge by default; the explicit time-gated
+        # interaction families help the linear model more than the tree blend arm.
         self.exclude_families = {
             f.strip()
-            for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
+            for f in os.environ.get(
+                "MEOW_LGB_EXCLUDE_FAMILIES",
+                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+            ).split(",")
             if f.strip()
         }
         self._X_reservoir = None
