@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from importlib import import_module
 
-__all__ = ["DeepLOBLite", "TLOBStarter", "IntervalResidualRidge"]
+__all__ = ["DeepLOBLite", "TLOBStarter", "IntervalResidualRidge", "TorchModel"]
 
 _MODULE_MAP = {
     "DeepLOBLite": "models.deeplob_lite",
     "TLOBStarter": "models.tlob_starter",
     "IntervalResidualRidge": "models.interval_residual",
+    "TorchModel": "models.torch_model",
 }
 
 
