@@ -28,9 +28,16 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
+        # Prune only the densest price-like raw-level CS ranks by default. Keep
+        # queue/flow level ranks available because they may carry nonlinear state
+        # information that the tree arm still uses.
         self.exclude_patterns = tuple(
             pattern.strip()
-            for pattern in os.environ.get("MEOW_LGB_EXCLUDE_PATTERNS", "_level_rank_cs").split(",")
+            for pattern in os.environ.get(
+                "MEOW_LGB_EXCLUDE_PATTERNS",
+                "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
+                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
+            ).split(",")
             if pattern.strip()
         )
         self._X_reservoir = None
