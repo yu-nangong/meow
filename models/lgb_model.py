@@ -28,17 +28,16 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
-        # Prune the proven price-like raw-rank subset plus the smooth VWAD z-scores.
-        # Mid-price-only removal tied the best, while grouped price-like z-score
-        # removal regressed. This isolates whether the VWAD z-scores are the
-        # dispensable part of that grouped regression.
+        # Prune the proven price-like raw-rank subset and extend it to VWAD level
+        # ranks, which are still smooth price-location encodings. Keep the VWAD
+        # z-scores available because grouped smooth-zscore removal regressed.
         self.exclude_patterns = tuple(
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
                 "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
                 "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,"
-                "ask0_level_rank_cs,buyVwad_zs,sellVwad_zs",
+                "ask0_level_rank_cs,buyVwad_level_rank_cs,sellVwad_level_rank_cs",
             ).split(",")
             if pattern.strip()
         )
