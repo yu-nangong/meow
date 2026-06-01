@@ -7,7 +7,7 @@ import numpy as np
 
 class IntervalResidualRidge:
     def __init__(self):
-        self.enabled = os.environ.get("MEOW_ENABLE_INTERVAL_RESIDUAL", "1") != "0"
+        self.enabled = os.environ.get("MEOW_ENABLE_INTERVAL_RESIDUAL", "0") != "0"
         self.alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_ALPHA", "0.5"))
         self.prior_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_PRIOR_ALPHA", "0.5"))
         self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.4"))

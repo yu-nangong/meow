@@ -10,7 +10,7 @@ import pandas as pd
 
 class RawResidualModel:
     def __init__(self):
-        self.enabled = os.environ.get("MEOW_RAW_RESIDUAL_ENABLE", "1") != "0"
+        self.enabled = os.environ.get("MEOW_RAW_RESIDUAL_ENABLE", "0") != "0"
         self.weight = float(os.environ.get("MEOW_RAW_RESIDUAL_WEIGHT", "0.12"))
         self.max_rows = int(os.environ.get("MEOW_RAW_RESIDUAL_MAX_ROWS", "250000"))
         self.num_leaves = int(os.environ.get("MEOW_RAW_RESIDUAL_NUM_LEAVES", "15"))
