@@ -1,4 +1,4 @@
-"""LightGBM base model with reservoir-sampled chunked training."""
+"""LightGBM base model with sequential chunked training by default."""
 from __future__ import annotations
 
 import os
@@ -13,12 +13,13 @@ class LGBModel:
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
+        self.chunk_estimators = int(os.environ.get("MEOW_LGB_CHUNK_ESTIMATORS", "25"))
+        self.sequential = os.environ.get("MEOW_LGB_SEQUENTIAL", "1") != "0"
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
-        # Column families to exclude (matching ridge's exclude_families default)
         self.exclude_families = {
             f.strip()
             for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
@@ -39,13 +40,31 @@ class LGBModel:
         self._feature_names = None
 
     def partial_fit(self, xdf, ydf):
-        # Select columns, excluding unwanted families
         if self._feature_names is None:
             cols = [c for c in xdf.columns if self._family_of(c) not in self.exclude_families]
             self._feature_names = cols
+
+        if self.sequential:
+            self._partial_fit_sequential(xdf, ydf)
+        else:
+            self._partial_fit_reservoir(xdf, ydf)
+
+    def _partial_fit_sequential(self, xdf, ydf):
+        x = xdf.loc[:, self._feature_names].to_numpy(dtype=np.float32)
+        y = ydf.to_numpy(dtype=np.float32).ravel()
+        params = self._lgb_params()
+        train_data = lgb.Dataset(x, label=y, free_raw_data=True)
+        self._model = lgb.train(
+            params,
+            train_data,
+            num_boost_round=self.chunk_estimators,
+            init_model=self._model,
+            keep_training_booster=True,
+        )
+
+    def _partial_fit_reservoir(self, xdf, ydf):
         x = xdf[self._feature_names].to_numpy(dtype=np.float32)
         y = ydf.to_numpy(dtype=np.float32).ravel()
-
         n = len(x)
         if self._X_reservoir is None:
             self._X_reservoir = x.copy()
@@ -54,12 +73,10 @@ class LGBModel:
         else:
             capacity = self._X_reservoir.shape[0]
             if capacity < self.max_rows:
-                # Still filling — concatenate up to max_rows
                 take = min(n, self.max_rows - capacity)
                 self._X_reservoir = np.concatenate([self._X_reservoir, x[:take]], axis=0)
                 self._y_reservoir = np.concatenate([self._y_reservoir, y[:take]], axis=0)
             else:
-                # Reservoir sampling: replace with decreasing probability
                 for i in range(n):
                     j = self._rng.randint(0, self._n_accumulated + i + 1)
                     if j < capacity:
@@ -68,13 +85,19 @@ class LGBModel:
             self._n_accumulated += n
 
     def finalize_fit(self):
+        if self.sequential:
+            return  # training happened incrementally in partial_fit
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
-        params = dict(
+        params = self._lgb_params()
+        train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
+        self._model = lgb.train(params, train_data, num_boost_round=self.n_estimators)
+
+    def _lgb_params(self):
+        return dict(
             boosting_type="rf" if self.extra_trees else "gbdt",
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
-            n_estimators=self.n_estimators,
             subsample=self.subsample,
             subsample_freq=1,
             colsample_bytree=self.colsample_bytree,
@@ -82,13 +105,7 @@ class LGBModel:
             reg_lambda=self.reg_lambda,
             verbose=-1,
             random_state=42,
-            n_jobs=1,  # single-thread to avoid grader memory pressure
-        )
-        train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
-        self._model = lgb.train(
-            params,
-            train_data,
-            num_boost_round=self.n_estimators,
+            n_jobs=1,
         )
 
     def predict(self, xdf):
