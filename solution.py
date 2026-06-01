@@ -27,6 +27,7 @@ LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRI
 FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
+RESIDUAL_LGB_WEIGHT = float(os.environ.get("MEOW_RESIDUAL_LGB_WEIGHT", "0.5"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -140,7 +141,7 @@ def _fit_forecast_mean_shrink(
 
 def _create_base_model():
     if MODEL_TYPE == "blend":
-        return BlendModel()
+        return MeowModel(cacheDir=None)  # fallback: Ridge only for cascade
     if MODEL_TYPE == "lgb":
         return LGBModel()
     if MODEL_TYPE == "elasticnet":
@@ -152,27 +153,52 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
-    model = _create_base_model()
-    model.reset()
 
+    # --- Stage 1: Train Ridge on raw target ---
+    ridge = MeowModel(cacheDir=None)
+    ridge.reset()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
-        model.partial_fit(xdf, y_train)
+        ridge.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
-    model.finalize_fit()
+    ridge.finalize_fit()
+
+    # --- Stage 2: Train LGB on Ridge residuals ---
+    lgb = LGBModel()
+    lgb.reset()
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        ridge_pred = ridge.predict(xdf)
+        resid = _train_target_array(ydf) - ridge_pred
+        y_resid = ydf.copy()
+        y_resid.loc[:, "fret12"] = resid
+        lgb.partial_fit(xdf, y_resid)
+        del xdf, ydf, y_resid
+    lgb.finalize_fit()
+
+    # --- Combined predictor: Ridge base + LGB residual correction ---
+    class _CascadeModel:
+        def predict(self, xdf):
+            rp = ridge.predict(xdf)
+            lp = lgb.predict(xdf)
+            return rp + RESIDUAL_LGB_WEIGHT * lp
+
+    cascade = _CascadeModel()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
-        forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
+        forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, cascade, train_dates)
     interval_residual = IntervalResidualRidge()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        base_pred = _postprocess_forecast(ydf, cascade.predict(xdf), forecast_cs_mean_shrink)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
@@ -184,7 +210,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         ydf = ydf.copy()
-        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = _postprocess_forecast(ydf, cascade.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
         del xdf
