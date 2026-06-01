@@ -29,6 +29,10 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
+# Stacking: learn blend weights on an out-of-sample fold
+STACK_ENABLED = os.environ.get("MEOW_STACK_ENABLED", "1") != "0"
+STACK_ALPHA = float(os.environ.get("MEOW_STACK_ALPHA", "10.0"))
+
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
     if not dates:
@@ -114,7 +118,7 @@ def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: floa
 def _fit_forecast_mean_shrink(
     h5dir: str,
     feat_gen: MeowFeatureGenerator,
-    model: MeowModel,
+    model,
     train_dates: List[int],
 ) -> float:
     if FORECAST_CS_MEAN_SHRINK_TAIL_DAYS > 0:
@@ -136,6 +140,83 @@ def _fit_forecast_mean_shrink(
     if denom <= 0.0:
         return FORECAST_CS_MEAN_SHRINK
     return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
+
+
+def _fit_stacker(
+    h5dir: str,
+    feat_gen: MeowFeatureGenerator,
+    model: BlendModel,
+    train_dates: List[int],
+) -> None:
+    """Fit a Ridge combiner on LGB + Ridge training predictions.
+
+    Uses the last N chunks of training data as a holdout fold to avoid
+    overfitting from in-sample predictions. LGB+base are refit on the
+    earlier chunks, then the combiner is calibrated on the holdout.
+    """
+    if len(train_dates) < N_CHUNKS + 4:
+        return  # Not enough data for holdout
+
+    # Split: early chunks for base model, tail 2 chunks for stacker calibration
+    holdout_dates = train_dates[-max(len(train_dates) // N_CHUNKS, 4):]
+    base_dates = [d for d in train_dates if d not in holdout_dates]
+
+    # Refit base models on early data only
+    base_lgb = LGBModel()
+    base_ridge = MeowModel(cacheDir=None)
+    for chunk in _chunk_dates(base_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        y_train = ydf.copy()
+        y_train.loc[:, "fret12"] = _train_target_array(ydf)
+        base_lgb.partial_fit(xdf, y_train)
+        base_ridge.partial_fit(xdf, y_train)
+        del xdf, ydf, y_train
+    base_lgb.finalize_fit()
+    base_ridge.finalize_fit()
+
+    # Build stacking design matrix from holdout
+    X_parts = []
+    y_parts = []
+    for chunk in _chunk_dates(holdout_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        lgb_pred = base_lgb.predict(xdf)
+        ridge_pred = base_ridge.predict(xdf)
+        interval_max = xdf.index.get_level_values("interval").groupby(
+            xdf.index.get_level_values("date"), sort=False
+        ).transform("max").clip(lower=1)
+        int_frac = xdf.index.get_level_values("interval").to_numpy(dtype=np.float64) / interval_max.to_numpy(
+            dtype=np.float64
+        ) - 0.5
+        X_parts.append(np.column_stack([
+            lgb_pred,
+            ridge_pred,
+            int_frac * lgb_pred,
+            int_frac * ridge_pred,
+        ]))
+        y_parts.append(_train_target_array(ydf))
+        del xdf, ydf
+
+    X_stack = np.concatenate(X_parts, axis=0).astype(np.float64)
+    y_stack = np.concatenate(y_parts).astype(np.float64)
+
+    # Standardize stacking features
+    X_mean = X_stack.mean(axis=0)
+    X_std = X_stack.std(axis=0).clip(min=1e-12)
+    X_norm = (X_stack - X_mean) / X_std
+    y_mean = y_stack.mean()
+
+    # Ridge closed-form
+    n_features = X_norm.shape[1]
+    ztz = X_norm.T @ X_norm
+    zty = X_norm.T @ (y_stack - y_mean)
+    coef_scaled = np.linalg.solve(ztz + np.diag(np.full(n_features, STACK_ALPHA)), zty)
+    coef = coef_scaled / X_std
+    intercept = float(y_mean - X_mean @ coef)
+    model.set_stacker(coef, intercept)
 
 
 def _create_base_model():
@@ -164,6 +245,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
+
+    # Fit stacking combiner on holdout fold
+    if STACK_ENABLED and isinstance(model, BlendModel):
+        _fit_stacker(h5dir, feat_gen, model, train_dates)
+
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
