@@ -28,15 +28,16 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
-        # Prune only the densest price-like raw-level CS ranks by default. Keep
-        # queue/flow level ranks available because they may carry nonlinear state
-        # information that the tree arm still uses.
+        # Prune the proven price-like raw-rank subset plus only last-price zscore
+        # for the next ownership probe. The mid-price-only exclusion tied the best,
+        # so this symmetric test isolates whether last-price zscore is the useful proxy.
         self.exclude_patterns = tuple(
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
                 "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
-                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
+                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,"
+                "ask0_level_rank_cs,lastpx_zs",
             ).split(",")
             if pattern.strip()
         )
