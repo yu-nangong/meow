@@ -59,8 +59,8 @@ class LagSequenceModel:
         self._mean = None
         self._std = None
 
-    def partial_fit(self, raw: pd.DataFrame):
-        seq_x, seq_y, _ = self._build_sequences(raw)
+    def partial_fit(self, raw: pd.DataFrame, target: np.ndarray | None = None):
+        seq_x, seq_y, _ = self._build_sequences(raw, target=target)
         if len(seq_y) == 0:
             return
         self._update_reservoir(seq_x, seq_y)
@@ -154,7 +154,12 @@ class LagSequenceModel:
         out[row_ids] = np.concatenate(preds).astype(np.float64, copy=False)
         return out
 
-    def _build_sequences(self, raw: pd.DataFrame, include_target: bool = True):
+    def _build_sequences(
+        self,
+        raw: pd.DataFrame,
+        include_target: bool = True,
+        target: np.ndarray | None = None,
+    ):
         cols = [c for c in self.raw_cols if c in raw.columns]
         empty_x = np.zeros((0, self.lookback, len(self.raw_cols)), dtype=np.float32)
         empty_y = np.zeros(0, dtype=np.float32)
@@ -163,6 +168,8 @@ class LagSequenceModel:
             return empty_x, empty_y, empty_ids
         raw = raw.reset_index(drop=True).copy()
         raw["_row_id"] = np.arange(len(raw), dtype=np.int64)
+        if target is not None:
+            raw["_target"] = np.asarray(target, dtype=np.float32)
         raw = raw.sort_values(["date", "symbol", "interval"], kind="mergesort")
         x_parts = []
         y_parts = []
@@ -177,7 +184,10 @@ class LagSequenceModel:
             x_parts.append(np.ascontiguousarray(windows))
             id_parts.append(grp["_row_id"].to_numpy(dtype=np.int64, copy=False)[self.lookback - 1 :])
             if include_target:
-                y_parts.append(grp["fret12"].to_numpy(dtype=np.float32, copy=False)[self.lookback - 1 :])
+                if target is not None:
+                    y_parts.append(grp["_target"].to_numpy(dtype=np.float32, copy=False)[self.lookback - 1 :])
+                else:
+                    y_parts.append(grp["fret12"].to_numpy(dtype=np.float32, copy=False)[self.lookback - 1 :])
         if not x_parts:
             return empty_x, empty_y, empty_ids
         x = np.concatenate(x_parts, axis=0)

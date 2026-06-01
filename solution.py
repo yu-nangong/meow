@@ -30,7 +30,8 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 SEQUENCE_BLEND_ENABLE = os.environ.get("MEOW_SEQUENCE_BLEND_ENABLE", "1") != "0"
-SEQUENCE_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQUENCE_BLEND_WEIGHT", "0.10"))
+SEQUENCE_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQUENCE_BLEND_WEIGHT", "0.06"))
+SEQUENCE_TRAIN_TAIL_DAYS = int(os.environ.get("MEOW_SEQUENCE_TRAIN_TAIL_DAYS", "20"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -169,10 +170,14 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del xdf, ydf, y_train
     model.finalize_fit()
     if seq_model is not None:
-        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        seq_train_dates = train_dates[-SEQUENCE_TRAIN_TAIL_DAYS:] if SEQUENCE_TRAIN_TAIL_DAYS > 0 else train_dates
+        for chunk in _chunk_dates(seq_train_dates, min(N_CHUNKS, len(seq_train_dates))):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-            seq_model.partial_fit(raw)
-            del raw
+            xdf, ydf = feat_gen.genFeatures(raw)
+            base_pred = _postprocess_forecast(ydf, model.predict(xdf), 0.0)
+            seq_target = _train_target_array(ydf) - base_pred
+            seq_model.partial_fit(raw, target=seq_target)
+            del raw, xdf, ydf, base_pred, seq_target
         seq_model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
