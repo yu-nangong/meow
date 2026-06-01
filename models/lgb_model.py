@@ -9,7 +9,7 @@ import lightgbm as lgb
 
 class LGBModel:
     def __init__(self):
-        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
+        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "500000"))
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
@@ -21,7 +21,7 @@ class LGBModel:
         # Column families to exclude (matching ridge's exclude_families default)
         self.exclude_families = {
             f.strip()
-            for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
+            for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "").split(",")
             if f.strip()
         }
         self._X_reservoir = None
