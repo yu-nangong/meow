@@ -33,7 +33,7 @@ class ElasticNetModel:
             cv_l1_str = os.environ.get("MEOW_ELASTIC_CV_L1_RATIO", "0.1,0.3,0.5,0.7,0.9")
             self.cv_l1_ratios = [float(l1) for l1 in cv_l1_str.split(",") if l1.strip()]
         self.accumulate_dtype = os.environ.get("MEOW_ELASTIC_ACCUMULATE_DTYPE", "float32")
-        self.max_samples = int(os.environ.get("MEOW_ELASTIC_MAX_SAMPLES", "0"))
+        self.max_samples = int(os.environ.get("MEOW_ELASTIC_MAX_SAMPLES", "250000"))
         self._X_list: list[np.ndarray] = []
         self._y_list: list[np.ndarray] = []
         self._feature_names: list[str] = []

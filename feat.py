@@ -213,6 +213,7 @@ class MeowFeatureGenerator(object):
             "time_sin_2pi",
             "time_cos_2pi",
             "time_sin_4pi",
+            "time_cos_4pi",
             "trade_imb_rank_cs_x_time",
             "flow_imb_rank_cs_x_time",
             "ret1_rank_cs_x_time",
@@ -490,6 +491,7 @@ class MeowFeatureGenerator(object):
                 "time_sin_2pi": time_sin_2pi,
                 "time_cos_2pi": time_cos_2pi,
                 "time_sin_4pi": np.sin(2.0 * theta),
+                "time_cos_4pi": np.cos(2.0 * theta),
             },
             index=df.index,
         )
