@@ -5,15 +5,15 @@ from log import log
 
 class MeowModel(object):
     def __init__(self, cacheDir):
-        self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.01"))
+        self.alpha = float(os.environ.get("MEOW_RIDGE_ALPHA", "0.003"))
         self.base_alpha_mult = float(os.environ.get("MEOW_BASE_ALPHA_MULT", "1.0"))
         self.cs_alpha_mult = float(os.environ.get("MEOW_CS_ALPHA_MULT", "1.0"))
         self.rank_alpha_mult = float(os.environ.get("MEOW_RANK_ALPHA_MULT", "1.0"))
         self.time_basis_alpha_mult = float(os.environ.get("MEOW_TIME_BASIS_ALPHA_MULT", "1.0"))
-        self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "0.35"))
-        self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "0.35"))
-        self.time_sq_alpha_mult = float(os.environ.get("MEOW_TIME_SQ_ALPHA_MULT", "0.6"))
-        self.u_sq_alpha_mult = float(os.environ.get("MEOW_U_SQ_ALPHA_MULT", "0.6"))
+        self.time_alpha_mult = float(os.environ.get("MEOW_TIME_ALPHA_MULT", "1.0"))
+        self.u_alpha_mult = float(os.environ.get("MEOW_U_ALPHA_MULT", "1.0"))
+        self.time_sq_alpha_mult = float(os.environ.get("MEOW_TIME_SQ_ALPHA_MULT", "1.0"))
+        self.u_sq_alpha_mult = float(os.environ.get("MEOW_U_SQ_ALPHA_MULT", "1.0"))
         self.exclude_families = {
             family.strip()
             for family in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
