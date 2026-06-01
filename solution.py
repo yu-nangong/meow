@@ -17,7 +17,7 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "lgb").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
