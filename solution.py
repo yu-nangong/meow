@@ -176,7 +176,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        raw_residual.partial_fit(raw, resid)
+        raw_residual.partial_fit(raw, resid, base_pred=base_pred)
         del raw, xdf, ydf, base_pred, resid
     interval_residual.finalize_fit()
     raw_residual.finalize_fit()
@@ -188,7 +188,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
-        forecast = forecast + raw_residual.predict(raw)
+        forecast = forecast + raw_residual.predict(raw, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
         del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())

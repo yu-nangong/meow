@@ -20,6 +20,7 @@ class RawResidualModel:
         self.colsample_bytree = float(os.environ.get("MEOW_RAW_RESIDUAL_COLSAMPLE", "0.7"))
         self.min_child_samples = int(os.environ.get("MEOW_RAW_RESIDUAL_MIN_CHILD", "200"))
         self.reg_lambda = float(os.environ.get("MEOW_RAW_RESIDUAL_REG_LAMBDA", "2.0"))
+        self.include_base_rank = os.environ.get("MEOW_RAW_RESIDUAL_INCLUDE_BASE_RANK", "1") != "0"
         self.raw_cols = [
             "bid0",
             "ask0",
@@ -79,7 +80,7 @@ class RawResidualModel:
         self._model = None
         self._feature_names = None
 
-    def _transform_raw(self, raw: pd.DataFrame) -> pd.DataFrame:
+    def _transform_raw(self, raw: pd.DataFrame, base_pred: np.ndarray | None = None) -> pd.DataFrame:
         cols = [c for c in self.raw_cols if c in raw.columns]
         grp_keys = [raw["date"], raw["interval"]]
         base = raw.loc[:, cols].astype(np.float32, copy=False)
@@ -99,12 +100,17 @@ class RawResidualModel:
         out = pd.concat([z, ranks], axis=1)
         out["interval_frac_centered"] = frac
         out["interval_abs_centered"] = np.abs(frac)
+        if self.include_base_rank and base_pred is not None:
+            base_forecast = pd.Series(np.asarray(base_pred, dtype=np.float32), index=raw.index, copy=False)
+            base_rank = base_forecast.groupby(grp_keys, sort=False).rank(pct=True) - 0.5
+            out["base_pred_rank_cs"] = base_rank.to_numpy(dtype=np.float32, copy=False)
+            out["base_pred_abs_rank_cs"] = np.abs(out["base_pred_rank_cs"])
         return out.fillna(0.0)
 
-    def partial_fit(self, raw: pd.DataFrame, resid: np.ndarray):
+    def partial_fit(self, raw: pd.DataFrame, resid: np.ndarray, base_pred: np.ndarray | None = None):
         if not self.enabled or self.weight == 0.0:
             return
-        feats = self._transform_raw(raw)
+        feats = self._transform_raw(raw, base_pred=base_pred)
         x = feats.to_numpy(dtype=np.float32, copy=False)
         y = np.asarray(resid, dtype=np.float32)
         if self._feature_names is None:
@@ -152,9 +158,9 @@ class RawResidualModel:
         train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
         self._model = lgb.train(params, train_data, num_boost_round=self.n_estimators)
 
-    def predict(self, raw: pd.DataFrame) -> np.ndarray:
+    def predict(self, raw: pd.DataFrame, base_pred: np.ndarray | None = None) -> np.ndarray:
         if not self.enabled or self.weight == 0.0 or self._model is None:
             return np.zeros(len(raw), dtype=np.float64)
-        feats = self._transform_raw(raw)
+        feats = self._transform_raw(raw, base_pred=base_pred)
         x = feats.loc[:, self._feature_names].to_numpy(dtype=np.float32, copy=False)
         return self.weight * self._model.predict(x).astype(np.float64)
