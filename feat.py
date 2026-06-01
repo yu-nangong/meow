@@ -213,7 +213,10 @@ class MeowFeatureGenerator(object):
             "time_sin_2pi",
             "time_cos_2pi",
             "time_sin_4pi",
+            "time_cos_4pi",
             "trade_imb_rank_cs_x_time",
+            "dow_sin",
+            "dow_cos",
             "flow_imb_rank_cs_x_time",
             "ret1_rank_cs_x_time",
             "ret6_rank_cs_x_time",
@@ -476,6 +479,10 @@ class MeowFeatureGenerator(object):
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
+        raw_date = df["date"]
+        day_of_week = pd.to_datetime(raw_date.astype(str), format="%Y%m%d").dt.dayofweek
+        dow_sin = np.sin(2.0 * np.pi * day_of_week.to_numpy(dtype=np.float64) / 5.0)
+        dow_cos = np.cos(2.0 * np.pi * day_of_week.to_numpy(dtype=np.float64) / 5.0)
         theta = 2.0 * np.pi * df["interval"] / interval_max
         time_sin_2pi = np.sin(theta)
         time_cos_2pi = np.cos(theta)
@@ -484,6 +491,9 @@ class MeowFeatureGenerator(object):
                 "interval_frac_centered": interval_frac_centered,
                 "interval_u": interval_u,
                 "interval_frac_sq": interval_frac_centered * interval_frac_centered,
+                "time_cos_4pi": np.cos(2.0 * theta),
+                "dow_sin": dow_sin,
+                "dow_cos": dow_cos,
                 "interval_frac_cu": interval_frac_centered * interval_frac_centered * interval_frac_centered,
                 # Use a steeper symmetric shape here; abs(x)^2 duplicates x^2 exactly.
                 "interval_u_sq": interval_u * interval_u * interval_u,
