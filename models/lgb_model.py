@@ -24,7 +24,7 @@ class LGBModel:
             f.strip()
             for f in os.environ.get(
                 "MEOW_LGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+                "cs,time_basis,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
             ).split(",")
             if f.strip()
         }
