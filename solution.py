@@ -17,6 +17,7 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.blend_model import BlendModel
+from models.raw_residual_model import RawResidualModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -168,15 +169,17 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
     interval_residual = IntervalResidualRidge()
+    raw_residual = RawResidualModel()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
+        raw_residual.partial_fit(raw, resid)
+        del raw, xdf, ydf, base_pred, resid
     interval_residual.finalize_fit()
+    raw_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -186,8 +189,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        forecast = forecast + raw_residual.predict(raw)
         ydf.loc[:, "forecast"] = forecast
-        del xdf
+        del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
 
