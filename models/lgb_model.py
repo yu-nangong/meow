@@ -21,7 +21,7 @@ class LGBModel:
         # Column families to exclude (matching ridge's exclude_families default)
         self.exclude_families = {
             f.strip()
-            for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "cs").split(",")
+            for f in os.environ.get("MEOW_EXCLUDE_FAMILIES", "").split(",")
             if f.strip()
         }
         self._X_reservoir = None
