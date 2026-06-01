@@ -119,6 +119,14 @@ class IntervalResidualRidge:
                 name for name in self.base_rank_interaction_features if name in xdf.columns
             ]
         parts = []
+        # Time-of-day sine/cosine encoding: circular intraday position
+        # Captures periodic patterns (open ≈ close, different from mid-day)
+        intervals = xdf.index.get_level_values("interval").to_numpy(dtype=np.float64, copy=False)
+        interval_max = max(intervals.max(), 1.0)
+        theta = 2.0 * np.pi * intervals / interval_max
+        parts.append(np.sin(theta).reshape(-1, 1))
+        parts.append(np.cos(theta).reshape(-1, 1))
+        parts.append(np.sin(2.0 * theta).reshape(-1, 1))
         if self._selected_columns:
             parts.append(xdf.loc[:, self._selected_columns].to_numpy(dtype=np.float64, copy=False))
         if self.use_base_pred_rank and base_pred is not None:
