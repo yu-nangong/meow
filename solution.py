@@ -15,6 +15,7 @@ from feat import MeowFeatureGenerator
 from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
+from models.hgbt_model import HGBTModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -137,6 +138,8 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
+    if MODEL_TYPE == "hgbt":
+        return HGBTModel(cacheDir=None)
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
     return MeowModel(cacheDir=None)
@@ -159,18 +162,22 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del xdf, ydf, y_train
     model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
+    if MODEL_TYPE == "hgbt":
+        forecast_cs_mean_shrink = 0.0  # trees handle intercepts natively
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
     interval_residual = IntervalResidualRidge()
-    for chunk in _chunk_dates(train_dates, N_CHUNKS):
-        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        resid = _train_target_array(ydf) - base_pred
-        interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
-    interval_residual.finalize_fit()
+    use_interval_residual = MODEL_TYPE != "hgbt"
+    if use_interval_residual:
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            resid = _train_target_array(ydf) - base_pred
+            interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
+            del xdf, ydf, base_pred, resid
+        interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
@@ -179,7 +186,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        if use_interval_residual:
+            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
