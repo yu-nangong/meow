@@ -17,7 +17,11 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
-TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
+_train_target_shrink_raw = os.environ.get("MEOW_TRAIN_TARGET_INTERVAL_SHRINK")
+if _train_target_shrink_raw is None:
+    TRAIN_TARGET_INTERVAL_SHRINK = 1.0 if os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0" else 0.0
+else:
+    TRAIN_TARGET_INTERVAL_SHRINK = float(_train_target_shrink_raw)
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -73,7 +77,7 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
 
 def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
     target = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
-    if not TRAIN_ON_INTERVAL_DEMEANED_TARGET:
+    if TRAIN_TARGET_INTERVAL_SHRINK <= 0.0:
         return target
     frame = pd.DataFrame(
         {
@@ -83,7 +87,8 @@ def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
         }
     )
     group_mean = frame.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
-    return target - group_mean.to_numpy(dtype=np.float64, copy=False)
+    shrink = min(TRAIN_TARGET_INTERVAL_SHRINK, 1.0)
+    return target - shrink * group_mean.to_numpy(dtype=np.float64, copy=False)
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
