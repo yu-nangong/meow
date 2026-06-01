@@ -16,7 +16,7 @@ from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "elasticnet").strip().lower()
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -168,4 +168,3 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         p_parts.append(ydf["forecast"].to_numpy())
 
     return _pearson_metrics(np.concatenate(y_parts), np.concatenate(p_parts))
-
