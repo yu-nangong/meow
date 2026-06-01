@@ -17,6 +17,7 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.blend_model import BlendModel
+from models.lag_sequence_model import LagSequenceModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -28,6 +29,8 @@ FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SH
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
+SEQUENCE_BLEND_ENABLE = os.environ.get("MEOW_SEQUENCE_BLEND_ENABLE", "1") != "0"
+SEQUENCE_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQUENCE_BLEND_WEIGHT", "0.10"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -153,6 +156,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
+    seq_model = LagSequenceModel() if SEQUENCE_BLEND_ENABLE else None
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
@@ -164,6 +168,12 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
+    if seq_model is not None:
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            seq_model.partial_fit(raw)
+            del raw
+        seq_model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
@@ -171,23 +181,25 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        if seq_model is not None:
+            base_pred = base_pred + SEQUENCE_BLEND_WEIGHT * seq_model.predict(raw)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
+        del raw, xdf, ydf, base_pred, resid
     interval_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        if seq_model is not None:
+            forecast = forecast + SEQUENCE_BLEND_WEIGHT * seq_model.predict(raw)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         ydf.loc[:, "forecast"] = forecast
-        del xdf
+        del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
 
