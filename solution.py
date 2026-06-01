@@ -17,9 +17,12 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.blend_model import BlendModel
+from models.aux_target_ridge import AuxTargetRidge
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
+AUX_TARGET_MODE = os.environ.get("MEOW_AUX_TARGET_MODE", "rank").strip().lower()
+AUX_TARGET_WEIGHT = float(os.environ.get("MEOW_AUX_TARGET_WEIGHT", "0.03"))
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.0"))
@@ -88,6 +91,41 @@ def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
     return target - group_mean.to_numpy(dtype=np.float64, copy=False)
 
 
+def _aux_target_array(ydf: pd.DataFrame) -> np.ndarray:
+    target = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+    if AUX_TARGET_MODE == "off" or AUX_TARGET_WEIGHT == 0.0:
+        return np.zeros(len(target), dtype=np.float64)
+    frame = pd.DataFrame(
+        {
+            "date": ydf.index.get_level_values("date"),
+            "interval": ydf.index.get_level_values("interval"),
+            "fret12": target,
+        }
+    )
+    group = frame.groupby(["date", "interval"], sort=False)["fret12"]
+    if AUX_TARGET_MODE == "demean":
+        center = group.transform("mean").to_numpy(dtype=np.float64, copy=False)
+        return target - center
+    if AUX_TARGET_MODE == "zscore":
+        center = group.transform("mean").to_numpy(dtype=np.float64, copy=False)
+        scale = group.transform("std").fillna(0.0).to_numpy(dtype=np.float64, copy=False)
+        return (target - center) / np.maximum(scale, 1e-6)
+    ranked = group.rank(method="average", pct=True).to_numpy(dtype=np.float64, copy=False)
+    return ranked - 0.5
+
+
+def _center_by_group(ydf: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
+    frame = pd.DataFrame(
+        {
+            "date": ydf.index.get_level_values("date"),
+            "interval": ydf.index.get_level_values("interval"),
+            "pred": np.asarray(pred, dtype=np.float64),
+        }
+    )
+    centered = frame["pred"] - frame.groupby(["date", "interval"], sort=False)["pred"].transform("mean")
+    return centered.to_numpy(dtype=np.float64, copy=False)
+
+
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
     if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA:
         return pred
@@ -153,7 +191,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
+    aux_model = AuxTargetRidge()
     model.reset()
+    aux_model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
@@ -162,8 +202,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
         model.partial_fit(xdf, y_train)
+        if AUX_TARGET_WEIGHT != 0.0 and AUX_TARGET_MODE != "off":
+            aux_model.partial_fit(xdf, _aux_target_array(ydf))
         del xdf, ydf, y_train
     model.finalize_fit()
+    aux_model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
@@ -186,6 +229,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        if AUX_TARGET_WEIGHT != 0.0 and AUX_TARGET_MODE != "off":
+            forecast = forecast + AUX_TARGET_WEIGHT * _center_by_group(ydf, aux_model.predict(xdf))
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
