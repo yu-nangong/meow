@@ -17,6 +17,7 @@ from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "1") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -68,6 +69,21 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
     out["group_median"] = grp.transform("median")
     out["group_std"] = grp.transform("std").fillna(0.0)
     return out
+
+
+def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
+    target = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+    if not TRAIN_ON_INTERVAL_DEMEANED_TARGET:
+        return target
+    frame = pd.DataFrame(
+        {
+            "date": ydf.index.get_level_values("date"),
+            "interval": ydf.index.get_level_values("interval"),
+            "fret12": target,
+        }
+    )
+    group_mean = frame.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
+    return target - group_mean.to_numpy(dtype=np.float64, copy=False)
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
@@ -137,8 +153,10 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
-        model.partial_fit(xdf, ydf)
-        del xdf, ydf
+        y_train = ydf.copy()
+        y_train.loc[:, "fret12"] = _train_target_array(ydf)
+        model.partial_fit(xdf, y_train)
+        del xdf, ydf, y_train
     model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
@@ -149,7 +167,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - base_pred
+        resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
     interval_residual.finalize_fit()
@@ -168,4 +186,3 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         p_parts.append(ydf["forecast"].to_numpy())
 
     return _pearson_metrics(np.concatenate(y_parts), np.concatenate(p_parts))
-
