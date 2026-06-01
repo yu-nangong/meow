@@ -18,6 +18,8 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
+        self.objective = os.environ.get("MEOW_LGB_OBJECTIVE", "huber")
+        self.huber_alpha = float(os.environ.get("MEOW_LGB_HUBER_ALPHA", "0.005"))
         # Column families to exclude (matching ridge's exclude_families default)
         self.exclude_families = {
             f.strip()
@@ -72,6 +74,7 @@ class LGBModel:
             return
         params = dict(
             boosting_type="rf" if self.extra_trees else "gbdt",
+            objective=self.objective,
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
             n_estimators=self.n_estimators,
@@ -84,6 +87,8 @@ class LGBModel:
             random_state=42,
             n_jobs=1,  # single-thread to avoid grader memory pressure
         )
+        if self.objective == "huber":
+            params["alpha"] = self.huber_alpha
         train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
         self._model = lgb.train(
             params,
