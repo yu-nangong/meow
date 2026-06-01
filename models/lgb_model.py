@@ -28,16 +28,17 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
-        # Prune the proven price-like raw-rank subset plus only last-price zscore
-        # for the next ownership probe. The mid-price-only exclusion tied the best,
-        # so this symmetric test isolates whether last-price zscore is the useful proxy.
+        # Prune the proven price-like raw-rank subset plus the smooth VWAD z-scores.
+        # Mid-price-only removal tied the best, while grouped price-like z-score
+        # removal regressed. This isolates whether the VWAD z-scores are the
+        # dispensable part of that grouped regression.
         self.exclude_patterns = tuple(
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
                 "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
                 "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,"
-                "ask0_level_rank_cs,lastpx_zs",
+                "ask0_level_rank_cs,buyVwad_zs,sellVwad_zs",
             ).split(",")
             if pattern.strip()
         )
