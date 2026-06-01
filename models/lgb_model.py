@@ -28,6 +28,16 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
+        # Keep quantity/queue z-scores for nonlinear state splits, but let ridge
+        # own the smoother price-location z-scores by default.
+        self.exclude_patterns = tuple(
+            pattern.strip()
+            for pattern in os.environ.get(
+                "MEOW_LGB_EXCLUDE_PATTERNS",
+                "midpx_zs,lastpx_zs,buyVwad_zs,sellVwad_zs",
+            ).split(",")
+            if pattern.strip()
+        )
         self._X_reservoir = None
         self._y_reservoir = None
         self._n_accumulated = 0
@@ -45,7 +55,7 @@ class LGBModel:
     def partial_fit(self, xdf, ydf):
         # Select columns, excluding unwanted families
         if self._feature_names is None:
-            cols = [c for c in xdf.columns if self._family_of(c) not in self.exclude_families]
+            cols = [c for c in xdf.columns if self._keep_column(c)]
             self._feature_names = cols
         x = xdf[self._feature_names].to_numpy(dtype=np.float32)
         y = ydf.to_numpy(dtype=np.float32).ravel()
@@ -100,6 +110,11 @@ class LGBModel:
             return np.zeros(len(xdf), dtype=np.float64)
         x = xdf[self._feature_names].to_numpy(dtype=np.float32)
         return self._model.predict(x).astype(np.float64)
+
+    def _keep_column(self, name):
+        if self.exclude_patterns and any(pattern in name for pattern in self.exclude_patterns):
+            return False
+        return self._family_of(name) not in self.exclude_families
 
     @staticmethod
     def _family_of(name):
