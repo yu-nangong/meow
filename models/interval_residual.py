@@ -31,7 +31,7 @@ class IntervalResidualRidge:
         )
         self.base_rank_interaction_mode = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_BASE_RANK_INTERACTION_MODE",
-            "split_tail",
+            "centered_split_tail",
         ).strip().lower()
         raw_features = os.environ.get(
             "MEOW_INTERVAL_RESIDUAL_FEATURES",
@@ -205,11 +205,13 @@ class IntervalResidualRidge:
     def _base_pred_rank_interaction_weights(self, centered):
         if self.base_rank_interaction_mode == "centered":
             return centered[:, None]
+        upper_tail = np.maximum(centered - self.base_pred_rank_tail_threshold, 0.0)
+        lower_tail = np.maximum(-centered - self.base_pred_rank_tail_threshold, 0.0)
         if self.base_rank_interaction_mode == "tail":
             tail_excess = np.maximum(np.abs(centered) - self.base_pred_rank_tail_threshold, 0.0)
             return (np.sign(centered) * tail_excess)[:, None]
-        upper_tail = np.maximum(centered - self.base_pred_rank_tail_threshold, 0.0)
-        lower_tail = np.maximum(-centered - self.base_pred_rank_tail_threshold, 0.0)
+        if self.base_rank_interaction_mode == "centered_split_tail":
+            return np.column_stack([centered, upper_tail, lower_tail])
         return np.column_stack([upper_tail, lower_tail])
 
     def _smooth_neighbor_deltas(self):
