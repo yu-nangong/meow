@@ -20,6 +20,7 @@ from models.blend_model import BlendModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
+TRAIN_ON_RANK_TARGET = os.environ.get("MEOW_TRAIN_ON_RANK_TARGET", "1") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.25"))
@@ -75,17 +76,22 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
 
 def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
     target = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
-    if not TRAIN_ON_INTERVAL_DEMEANED_TARGET:
-        return target
-    frame = pd.DataFrame(
-        {
+    if TRAIN_ON_RANK_TARGET:
+        frame = pd.DataFrame({
             "date": ydf.index.get_level_values("date"),
             "interval": ydf.index.get_level_values("interval"),
             "fret12": target,
-        }
-    )
-    group_mean = frame.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
-    return target - group_mean.to_numpy(dtype=np.float64, copy=False)
+        })
+        return frame.groupby(["date", "interval"], sort=False)["fret12"].rank(pct=True).to_numpy(dtype=np.float64)
+    elif TRAIN_ON_INTERVAL_DEMEANED_TARGET:
+        frame = pd.DataFrame({
+            "date": ydf.index.get_level_values("date"),
+            "interval": ydf.index.get_level_values("interval"),
+            "fret12": target,
+        })
+        group_mean = frame.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
+        return target - group_mean.to_numpy(dtype=np.float64, copy=False)
+    return target
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
