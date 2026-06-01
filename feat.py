@@ -261,6 +261,26 @@ class MeowFeatureGenerator(object):
         ]
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
+        # === Lag-1 difference features: capture momentum/direction of key signals ===
+        lag_diff_src_cols = [
+            "trade_imb",
+            "ob_imb0",
+            "micro_dev",
+            "flow_imb",
+            "turnover_imb",
+            "spread",
+            "add_turn_imb",
+            "depth_pressure_04",
+            "depth_pressure_1019",
+            "trade_imb_ema6",
+            "ob_imb0_ema6",
+            "ret12_resid",
+            "range_pos",
+            "day_open_gap",
+            "trade_imb_x_ob0",
+        ]
+        feature_names.extend(f"{col}_diff1" for col in lag_diff_src_cols)
+
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
 
@@ -383,6 +403,28 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
+
+
+        # === Lag-1 difference features: capture interval-to-interval momentum ===
+        lag_diff_src_cols = [
+            "trade_imb",
+            "ob_imb0",
+            "micro_dev",
+            "flow_imb",
+            "turnover_imb",
+            "spread",
+            "add_turn_imb",
+            "depth_pressure_04",
+            "depth_pressure_1019",
+            "trade_imb_ema6",
+            "ob_imb0_ema6",
+            "ret12_resid",
+            "range_pos",
+            "day_open_gap",
+            "trade_imb_x_ob0",
+        ]
+        diff_vals = {f"{c}_diff1": base_sym_day[c].transform(lambda s: s.diff(1)) for c in lag_diff_src_cols}
+        lag_diff_df = pd.DataFrame(diff_vals, index=df.index).fillna(0.0)
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
@@ -578,6 +620,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                lag_diff_df,
             ],
             axis=1,
         ).astype(np.float32)
