@@ -71,7 +71,7 @@ class LGBModel:
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
         params = dict(
-            boosting_type="rf" if self.extra_trees else "gbdt",
+            boosting_type="rf" if self.extra_trees else "goss",
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
             n_estimators=self.n_estimators,
