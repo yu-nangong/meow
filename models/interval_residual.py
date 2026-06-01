@@ -9,12 +9,12 @@ class IntervalResidualRidge:
     def __init__(self):
         self.enabled = os.environ.get("MEOW_ENABLE_INTERVAL_RESIDUAL", "1") != "0"
         self.alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_ALPHA", "0.5"))
-        self.prior_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_PRIOR_ALPHA", "0.5"))
-        self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.4"))
+        self.prior_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_PRIOR_ALPHA", "0.25"))
+        self.blend = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND", "0.55"))
         self.blend_scale = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_SCALE", "0.5"))
         self.blend_max_mult = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_MAX_MULT", "2.0"))
         self.blend_min_mult = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_BLEND_MIN_MULT", "0.4"))
-        self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.5"))
+        self.neighbor_alpha = float(os.environ.get("MEOW_INTERVAL_RESIDUAL_NEIGHBOR_ALPHA", "0.7"))
         self.use_base_pred_rank = os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK", "1") != "0"
         self.use_base_pred_rank_tail = (
             os.environ.get("MEOW_INTERVAL_RESIDUAL_USE_BASE_PRED_RANK_TAIL", "1") != "0"
