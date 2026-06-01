@@ -11,7 +11,9 @@ import pandas as pd
 class RawResidualModel:
     def __init__(self):
         self.enabled = os.environ.get("MEOW_RAW_RESIDUAL_ENABLE", "1") != "0"
-        self.weight = float(os.environ.get("MEOW_RAW_RESIDUAL_WEIGHT", "0.12"))
+        self.max_weight = float(os.environ.get("MEOW_RAW_RESIDUAL_WEIGHT", "0.18"))
+        self.calib_frac = float(os.environ.get("MEOW_RAW_RESIDUAL_CALIB_FRAC", "0.2"))
+        self.min_calib_rows = int(os.environ.get("MEOW_RAW_RESIDUAL_MIN_CALIB_ROWS", "5000"))
         self.max_rows = int(os.environ.get("MEOW_RAW_RESIDUAL_MAX_ROWS", "250000"))
         self.num_leaves = int(os.environ.get("MEOW_RAW_RESIDUAL_NUM_LEAVES", "15"))
         self.learning_rate = float(os.environ.get("MEOW_RAW_RESIDUAL_LR", "0.05"))
@@ -70,6 +72,7 @@ class RawResidualModel:
         self._n_seen = 0
         self._model = None
         self._feature_names = None
+        self._weight = 0.0
         self._rng = np.random.RandomState(42)
 
     def reset(self):
@@ -78,6 +81,7 @@ class RawResidualModel:
         self._n_seen = 0
         self._model = None
         self._feature_names = None
+        self._weight = 0.0
 
     def _transform_raw(self, raw: pd.DataFrame) -> pd.DataFrame:
         cols = [c for c in self.raw_cols if c in raw.columns]
@@ -102,7 +106,7 @@ class RawResidualModel:
         return out.fillna(0.0)
 
     def partial_fit(self, raw: pd.DataFrame, resid: np.ndarray):
-        if not self.enabled or self.weight == 0.0:
+        if not self.enabled or self.max_weight == 0.0:
             return
         feats = self._transform_raw(raw)
         x = feats.to_numpy(dtype=np.float32, copy=False)
@@ -130,7 +134,7 @@ class RawResidualModel:
         self._n_seen += n
 
     def finalize_fit(self):
-        if not self.enabled or self.weight == 0.0:
+        if not self.enabled or self.max_weight == 0.0:
             return
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
@@ -149,12 +153,33 @@ class RawResidualModel:
             random_state=42,
             n_jobs=1,
         )
+        self._weight = self._fit_weight(params)
         train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
         self._model = lgb.train(params, train_data, num_boost_round=self.n_estimators)
 
     def predict(self, raw: pd.DataFrame) -> np.ndarray:
-        if not self.enabled or self.weight == 0.0 or self._model is None:
+        if not self.enabled or self._weight == 0.0 or self._model is None:
             return np.zeros(len(raw), dtype=np.float64)
         feats = self._transform_raw(raw)
         x = feats.loc[:, self._feature_names].to_numpy(dtype=np.float32, copy=False)
-        return self.weight * self._model.predict(x).astype(np.float64)
+        return self._weight * self._model.predict(x).astype(np.float64)
+
+    def _fit_weight(self, params):
+        n = len(self._y_reservoir)
+        calib_rows = min(max(int(n * self.calib_frac), self.min_calib_rows), n // 2)
+        if calib_rows < 1000:
+            return self.max_weight
+        perm = self._rng.permutation(n)
+        calib_idx = perm[:calib_rows]
+        train_idx = perm[calib_rows:]
+        if len(train_idx) < 1000:
+            return self.max_weight
+        train_data = lgb.Dataset(self._X_reservoir[train_idx], label=self._y_reservoir[train_idx], free_raw_data=False)
+        calib_model = lgb.train(params, train_data, num_boost_round=self.n_estimators)
+        pred = calib_model.predict(self._X_reservoir[calib_idx]).astype(np.float64)
+        target = self._y_reservoir[calib_idx].astype(np.float64)
+        denom = float(pred @ pred)
+        if denom <= 1e-12:
+            return self.max_weight
+        beta = float((pred @ target) / denom)
+        return float(np.clip(beta, 0.0, self.max_weight))
