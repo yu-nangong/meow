@@ -19,7 +19,7 @@ class BlendModel:
     def __init__(self):
         self._lgb = LGBModel()
         self._ridge = MeowModel(cacheDir=None)
-        self._lgb_weight = float(os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.5"))
+        self._lgb_weight = float(os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.55"))
 
     def reset(self):
         self._lgb.reset()
