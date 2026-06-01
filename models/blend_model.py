@@ -10,15 +10,20 @@ from mdl import MeowModel
 
 
 class BlendModel:
-    """Train Ridge with either LightGBM or a compact FT-style transformer arm."""
+    """Train Ridge with LightGBM, FT-style attention, or a BatchEnsemble MLP arm."""
 
     def __init__(self):
-        nonlinear_model = os.environ.get("MEOW_BLEND_NONLINEAR_MODEL", "torch").strip().lower()
+        nonlinear_model = os.environ.get("MEOW_BLEND_NONLINEAR_MODEL", "tabm").strip().lower()
         if nonlinear_model == "torch":
             from models.torch_model import TorchModel
 
             self._nonlinear = TorchModel()
             default_weight = "0.35"
+        elif nonlinear_model == "tabm":
+            from models.tabm_model import TabMModel
+
+            self._nonlinear = TabMModel()
+            default_weight = "0.30"
         else:
             self._nonlinear = LGBModel()
             default_weight = os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.5")
