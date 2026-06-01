@@ -16,8 +16,9 @@ from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
+from models.nystroem_model import NystroemModel
 
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "nystroem").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
@@ -138,6 +139,8 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
+    if MODEL_TYPE == "nystroem":
+        return NystroemModel()
     if MODEL_TYPE == "lgb":
         return LGBModel()
     if MODEL_TYPE == "elasticnet":
