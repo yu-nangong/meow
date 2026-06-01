@@ -91,6 +91,14 @@ class MeowFeatureGenerator(object):
             "micro_dev_x_ret6",
             "ob0_x_ob19",
             "trade_imb_x_ret1",
+            "spread_x_trade_imb",
+            "flow_imb_x_ob0",
+            "micro_dev_x_spread",
+            "ob_imb4_x_ret6",
+            "depth04_x_micro_dev",
+            "trade_count_imb_x_ob0",
+            "turnover_imb_x_spread",
+            "ret6_x_ob0",
             "ret12_resid",
             "trade_imb_cs",
             "micro_dev_cs",
@@ -383,6 +391,14 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
+        base_df.loc[:, "spread_x_trade_imb"] = base_df["spread"] * base_df["trade_imb"]
+        base_df.loc[:, "flow_imb_x_ob0"] = base_df["flow_imb"] * base_df["ob_imb0"]
+        base_df.loc[:, "micro_dev_x_spread"] = base_df["micro_dev"] * base_df["spread"]
+        base_df.loc[:, "ob_imb4_x_ret6"] = base_df["ob_imb4"] * base_df["ret6"]
+        base_df.loc[:, "depth04_x_micro_dev"] = base_df["depth_pressure_04"] * base_df["micro_dev"]
+        base_df.loc[:, "trade_count_imb_x_ob0"] = base_df["trade_count_imb"] * base_df["ob_imb0"]
+        base_df.loc[:, "turnover_imb_x_spread"] = base_df["turnover_imb"] * base_df["spread"]
+        base_df.loc[:, "ret6_x_ob0"] = base_df["ret6"] * base_df["ob_imb0"]
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
