@@ -14,8 +14,9 @@ class LGBModel:
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
-        self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
-        self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
+        self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "1.0"))
+        self.colsample_bynode = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYNODE", "0.8"))
+        
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
         # Column families to exclude (matching ridge's exclude_families default)
@@ -77,7 +78,7 @@ class LGBModel:
             n_estimators=self.n_estimators,
             subsample=self.subsample,
             subsample_freq=1,
-            colsample_bytree=self.colsample_bytree,
+            colsample_bynode=self.colsample_bynode,
             min_child_samples=self.min_child_samples,
             reg_lambda=self.reg_lambda,
             verbose=-1,
