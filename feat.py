@@ -91,6 +91,9 @@ class MeowFeatureGenerator(object):
             "micro_dev_x_ret6",
             "ob0_x_ob19",
             "trade_imb_x_ret1",
+            "trade_imb_x_ret6",
+            "ob_imb0_x_ret6",
+            "flow_imb_x_ob_imb19",
             "ret12_resid",
             "trade_imb_cs",
             "micro_dev_cs",
@@ -383,6 +386,10 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
+        # Extended multiplicative interactions: momentum alignment and depth-flow
+        base_df.loc[:, "trade_imb_x_ret6"] = base_df["trade_imb"] * base_df["ret6"]
+        base_df.loc[:, "ob_imb0_x_ret6"] = base_df["ob_imb0"] * base_df["ret6"]
+        base_df.loc[:, "flow_imb_x_ob_imb19"] = base_df["flow_imb"] * base_df["ob_imb19"]
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
