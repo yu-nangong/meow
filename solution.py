@@ -15,6 +15,7 @@ from feat import MeowFeatureGenerator
 from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
+from models.lgb_model import LGBModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -137,6 +138,8 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
+    if MODEL_TYPE == "lgb":
+        return LGBModel()
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
     return MeowModel(cacheDir=None)
