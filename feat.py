@@ -571,9 +571,16 @@ class MeowFeatureGenerator(object):
             u_sq_interactions_df = pd.DataFrame(index=df.index)
 
         tail_hinge_threshold = self._tail_hinge_threshold()
-        tail_hinge_cols = [col for col in self._tail_hinge_features() if col in rank_df.columns]
+        tail_hinge_source = pd.concat(
+            [
+                rank_df,
+                base_df[[col for col in base_df.columns if col.endswith("_rank_cs")]],
+            ],
+            axis=1,
+        )
+        tail_hinge_cols = [col for col in self._tail_hinge_features() if col in tail_hinge_source.columns]
         if tail_hinge_cols:
-            tail_hinge_src = rank_df[tail_hinge_cols]
+            tail_hinge_src = tail_hinge_source[tail_hinge_cols]
             tail_hinge_pos = (tail_hinge_src - tail_hinge_threshold).clip(lower=0.0)
             tail_hinge_pos.columns = [f"{col}_tail_pos" for col in tail_hinge_cols]
             tail_hinge_neg = (-tail_hinge_src - tail_hinge_threshold).clip(lower=0.0)
