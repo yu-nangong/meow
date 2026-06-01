@@ -96,6 +96,21 @@ class MeowFeatureGenerator(object):
             "trade_imb_delta6",
             "flow_imb_delta6",
             "ret1_delta6",
+            "trade_imb_roll_z4",
+            "flow_imb_roll_z4",
+            "ob_imb0_roll_z4",
+            "micro_dev_roll_z4",
+            "ret1_roll_z4",
+            "ret6_roll_z4",
+            "trade_imb_roll_z24",
+            "flow_imb_roll_z24",
+            "ob_imb0_roll_z24",
+            "micro_dev_roll_z24",
+            "ret1_roll_z24",
+            "ret6_roll_z24",
+            "trade_imb_delta3",
+            "flow_imb_delta3",
+            "ret1_delta3",
             "ret12_resid",
             "trade_imb_cs",
             "micro_dev_cs",
@@ -397,6 +412,27 @@ class MeowFeatureGenerator(object):
         for col in delta_cols:
             base_df.loc[:, f"{col}_delta6"] = base_sym_day[col].transform(
                 lambda s: s - s.shift(6)
+            )
+        # === Multi-window temporal dynamics: roll_z4 (fast), roll_z24 (slow), delta3 (fast momentum) ===
+        for col in roll_z_cols:
+            roll_mean4 = base_sym_day[col].transform(
+                lambda s: s.rolling(window=4, min_periods=1).mean()
+            )
+            roll_std4 = base_sym_day[col].transform(
+                lambda s: s.rolling(window=4, min_periods=1).std()
+            )
+            base_df.loc[:, f"{col}_roll_z4"] = (base_df[col] - roll_mean4) / (roll_std4 + 1e-8)
+        for col in roll_z_cols:
+            roll_mean24 = base_sym_day[col].transform(
+                lambda s: s.rolling(window=24, min_periods=1).mean()
+            )
+            roll_std24 = base_sym_day[col].transform(
+                lambda s: s.rolling(window=24, min_periods=1).std()
+            )
+            base_df.loc[:, f"{col}_roll_z24"] = (base_df[col] - roll_mean24) / (roll_std24 + 1e-8)
+        for col in delta_cols:
+            base_df.loc[:, f"{col}_delta3"] = base_sym_day[col].transform(
+                lambda s: s - s.shift(3)
             )
 
         # === Raw-level cross-sectional features from HDF5 columns ===
