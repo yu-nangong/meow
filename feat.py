@@ -100,6 +100,10 @@ class MeowFeatureGenerator(object):
             "ret12_cs",
             "ret12_resid_cs",
             "spread_cs",
+            "spread4_cs",
+            "spread9_cs",
+            "spread19_cs",
+            "spread_slope_cs",
             "high_gap_cs",
             "trade_buy_high_gap_cs",
             "trade_sell_high_gap_cs",
@@ -135,6 +139,10 @@ class MeowFeatureGenerator(object):
             "ask_curvature",
             "bid_size_slope",
             "ask_size_slope",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -164,6 +172,10 @@ class MeowFeatureGenerator(object):
             "ob_imb_front_back_rank_cs",
             "ob_imb_inner_outer_rank_cs",
             "spread_rank_cs",
+            "spread4_rank_cs",
+            "spread9_rank_cs",
+            "spread19_rank_cs",
+            "spread_slope_rank_cs",
             "ret12_rank_cs",
             "sell_vwad_dev_rank_cs",
             "depth_pressure_59_rank_cs",
@@ -353,6 +365,10 @@ class MeowFeatureGenerator(object):
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
         features["bid_size_slope"] = (df["bsize0_4"] - df["bsize10_19"]) / (df["bsize0_4"] + df["bsize10_19"] + eps)
         features["ask_size_slope"] = (df["asize0_4"] - df["asize10_19"]) / (df["asize0_4"] + df["asize10_19"] + eps)
+        features["spread4"] = (df["ask4"] - df["bid4"]) / (df["midpx"] + eps)
+        features["spread9"] = (df["ask9"] - df["bid9"]) / (df["midpx"] + eps)
+        features["spread19"] = (df["ask19"] - df["bid19"]) / (df["midpx"] + eps)
+        features["spread_slope"] = features["spread"] - features["spread19"]
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
@@ -440,6 +456,10 @@ class MeowFeatureGenerator(object):
             "ret12",
             "ret12_resid",
             "spread",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
             "high_gap",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
@@ -474,6 +494,10 @@ class MeowFeatureGenerator(object):
             "ob_imb_front_back",
             "ob_imb_inner_outer",
             "spread",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
             "ret12",
             "sell_vwad_dev",
             "depth_pressure_59",
