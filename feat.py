@@ -317,6 +317,15 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
+        # Per-symbol rolling deviation: (raw - 8-interval rolling mean) within each symbol.
+        # Complements symz by capturing short-term within-stock drift vs recent local baseline,
+        # while symz captures full-window normalization.
+        _sym_rolldev_base = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+        ]
+        feature_names.extend(f"{col}_sym_rolldev" for col in _sym_rolldev_base)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
@@ -509,6 +518,23 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         symz_available = [c for c in symz_cols if c in base_df.columns]
+
+        # === Per-symbol rolling deviation features ===
+        # symz normalizes by full-training-window mean/std.
+        # rolldev captures short-term drift: (raw - 8-interval rolling mean) within each symbol.
+        # This measures within-stock momentum/reversal on a short timescale.
+        rolldev_cols = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+        ]
+        rolldev_available = [c for c in rolldev_cols if c in base_df.columns]
+        if rolldev_available:
+            sym_grp = base_df[rolldev_available].groupby(df["symbol"], sort=False)
+            sym_rollmean = sym_grp.transform(lambda x: x.rolling(window=8, min_periods=1).mean())
+            rolldev = (base_df[rolldev_available] - sym_rollmean).fillna(0.0)
+            rolldev.columns = [f"{col}_sym_rolldev" for col in rolldev_available]
+            base_df = pd.concat([base_df, rolldev.astype(np.float32)], axis=1)
         if symz_available:
             sym_grp = base_df[symz_available].groupby(df["symbol"], sort=False)
             sym_mean = sym_grp.transform("mean")
