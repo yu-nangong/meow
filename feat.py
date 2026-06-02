@@ -231,6 +231,17 @@ class MeowFeatureGenerator(object):
             "market_ret1_std",
             "market_trade_imb_std",
             "market_spread_std",
+            "market_ret3_std",
+            "market_ret6_std",
+            "market_ret12_std",
+            "market_ret24_std",
+            "market_ob_imb0_std",
+            "market_micro_dev_std",
+            "market_flow_imb_std",
+            "market_high_minus_low_std",
+            "market_ret12_resid_std",
+            "market_trade_count_share_std",
+            "market_depth_pressure_04_std",
 
             "interval_frac_centered",
             "interval_u",
@@ -459,7 +470,7 @@ class MeowFeatureGenerator(object):
         grp_market = base_df[market_cols].groupby([df["date"], df["interval"]], sort=False)
         market_means = grp_market.transform("mean")
         market_means.columns = [f"market_{col}" for col in market_cols]
-        market_std_cols = ["ret1", "trade_imb", "spread"]
+        market_std_cols = market_cols  # std for all 14 market columns
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
         base_df = pd.concat([base_df, market_means, market_stds], axis=1)
