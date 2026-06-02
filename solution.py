@@ -20,6 +20,7 @@ from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
+PER_SYMBOL_CALIBRATION = os.environ.get("MEOW_PER_SYMBOL_CALIBRATION", "0") != "0"
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 RANK_TARGET_TRAINING = os.environ.get("MEOW_RANK_TARGET", "0") != "0"
 
@@ -94,6 +95,45 @@ def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
     )
     group_mean = frame.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
     return target - group_mean.to_numpy(dtype=np.float64, copy=False)
+
+
+
+def _compute_per_symbol_biases(
+    h5dir: str,
+    feat_gen: MeowFeatureGenerator,
+    model: MeowModel,
+    train_dates: List[int],
+    n_chunks: int,
+    forecast_cs_mean_shrink: float,
+) -> Dict[str, float]:
+    """Compute per-symbol mean prediction bias from training data.
+
+    bias_s = mean(pred - fret12) for each symbol s.
+    During test, subtract bias from predictions to correct systematic
+    per-symbol over/under-prediction.
+    """
+    from collections import defaultdict
+    symbol_sum_err = defaultdict(float)
+    symbol_count = defaultdict(int)
+    for chunk in _chunk_dates(train_dates, n_chunks):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        pred = model.predict(xdf)
+        pred = _postprocess_forecast(ydf, pred, forecast_cs_mean_shrink)
+        symbols = ydf.index.get_level_values("symbol").to_numpy()
+        fret12 = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+        err = pred - fret12
+        for i, sym in enumerate(symbols):
+            symbol_sum_err[sym] += float(err[i])
+            symbol_count[sym] += 1
+        del xdf, ydf, pred, symbols, fret12, err
+    biases = {}
+    for sym in symbol_sum_err:
+        cnt = symbol_count[sym]
+        if cnt > 0:
+            biases[sym] = symbol_sum_err[sym] / cnt
+    return dict(biases)
 
 
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
@@ -173,6 +213,14 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del xdf, ydf, y_train
     model.finalize_fit()
 
+    # Per-symbol bias calibration: fit on training data, apply during test
+    per_symbol_biases: Dict[str, float] = {}
+    if PER_SYMBOL_CALIBRATION:
+        per_symbol_biases = _compute_per_symbol_biases(
+            h5dir, feat_gen, model, train_dates, N_CHUNKS,
+            forecast_cs_mean_shrink=FORECAST_CS_MEAN_SHRINK,
+        )
+
     skip_post = RANK_TARGET_TRAINING
     interval_residual = None
     panel_residual = None
@@ -212,6 +260,13 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        # Per-symbol bias correction
+        if per_symbol_biases:
+            syms = ydf.index.get_level_values("symbol").to_numpy()
+            sym_bias = np.array([per_symbol_biases.get(s, 0.0) for s in syms], dtype=np.float64)
+            nan_mask = ~np.isfinite(sym_bias)
+            sym_bias[nan_mask] = 0.0
+            forecast = forecast - sym_bias
         if not skip_post:
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             forecast = forecast + panel_residual.predict(ydf)
