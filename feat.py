@@ -152,6 +152,15 @@ class MeowFeatureGenerator(object):
             "slope_asym_919",
             "book_center_dev",
             "day_open_gap",
+            "bsize_slope",
+            "ask_size_slope",
+            "bsize_mid_slope",
+            "ask_size_mid_slope",
+            "bsize_top_share",
+            "ask_size_top_share",
+            "size_slope_asym",
+            "size_mid_slope_asym",
+            "size_top_share_asym",
             "range_pos",
             "trade_count_share",
             "ret3_x_flow",
@@ -386,6 +395,15 @@ class MeowFeatureGenerator(object):
         features["slope_asym_919"] = features["bid_slope_919"] - features["ask_slope_919"]
         features["book_center_dev"] = (df["midpx"] - 0.5 * (df["bid0"] + df["ask0"])) / (df["midpx"] + eps)
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
+        features["bsize_slope"] = (df["bsize0_4"] - df["bsize10_19"]) / (df["bsize0_4"] + df["bsize10_19"] + eps)
+        features["ask_size_slope"] = (df["asize0_4"] - df["asize10_19"]) / (df["asize0_4"] + df["asize10_19"] + eps)
+        features["bsize_mid_slope"] = (df["bsize0_4"] - df["bsize5_9"]) / (df["bsize0_4"] + df["bsize5_9"] + eps)
+        features["ask_size_mid_slope"] = (df["asize0_4"] - df["asize5_9"]) / (df["asize0_4"] + df["asize5_9"] + eps)
+        features["bsize_top_share"] = df["bsize0"] / (df["bsize0_4"] + eps)
+        features["ask_size_top_share"] = df["asize0"] / (df["asize0_4"] + eps)
+        features["size_slope_asym"] = features["bsize_slope"] - features["ask_size_slope"]
+        features["size_mid_slope_asym"] = features["bsize_mid_slope"] - features["ask_size_mid_slope"]
+        features["size_top_share_asym"] = features["bsize_top_share"] - features["ask_size_top_share"]
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
         )
