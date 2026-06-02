@@ -231,6 +231,11 @@ class MeowFeatureGenerator(object):
             "market_ret1_std",
             "market_trade_imb_std",
             "market_spread_std",
+            "market_ret1_skew",
+            "market_trade_imb_skew",
+            "market_spread_skew",
+            "market_flow_imb_skew",
+            "market_high_minus_low_skew",
 
             "interval_frac_centered",
             "interval_u",
@@ -462,7 +467,14 @@ class MeowFeatureGenerator(object):
         market_std_cols = ["ret1", "trade_imb", "spread"]
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
-        base_df = pd.concat([base_df, market_means, market_stds], axis=1)
+        # Market skew: cross-sectional distribution shape moments — regime asymmetry
+        skew_cols = ["ret1", "trade_imb", "spread", "flow_imb", "high_minus_low"]
+        grp_skew = base_df[skew_cols].groupby([df["date"], df["interval"]], sort=False)
+        market_skews = grp_skew.transform(
+            lambda s: pd.Series(s.skew(skipna=True) if len(s.dropna()) >= 5 else 0.0, index=s.index)
+        )
+        market_skews.columns = [f"market_{col}_skew" for col in skew_cols]
+        base_df = pd.concat([base_df, market_means, market_stds, market_skews], axis=1)
 
         cs_cols = [
             "trade_imb",
