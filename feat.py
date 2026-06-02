@@ -214,17 +214,17 @@ class MeowFeatureGenerator(object):
             "tradeSellQty_zs",
             "bsize0_zs",
             "asize0_zs",
-            "market_ret1",
+            "market_ret1_z",
             "market_ret3",
             "market_ret6",
             "market_ret12",
             "market_ret24",
-            "market_trade_imb",
+            "market_trade_imb_z",
             "market_ob_imb0",
-            "market_spread",
-            "market_micro_dev",
-            "market_flow_imb",
-            "market_high_minus_low",
+            "market_spread_z",
+            "market_micro_dev_z",
+            "market_flow_imb_z",
+            "market_high_minus_low_z",
             "market_ret12_resid",
             "market_trade_count_share",
             "market_depth_pressure_04",
@@ -467,13 +467,26 @@ class MeowFeatureGenerator(object):
             "flow_imb", "high_minus_low", "ret12_resid",
             "trade_count_share", "depth_pressure_04",
         ]
+        zscore_cols = ["ret1", "trade_imb", "spread", "micro_dev", "flow_imb", "high_minus_low"]
+        mean_only_cols = [c for c in market_cols if c not in zscore_cols]
+
         grp_market = base_df[market_cols].groupby([df["date"], df["interval"]], sort=False)
-        market_means = grp_market.transform("mean")
-        market_means.columns = [f"market_{col}" for col in market_cols]
         market_std_cols = market_cols  # std for all 14 market columns
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
-        base_df = pd.concat([base_df, market_means, market_stds], axis=1)
+
+        # Z-score features for key columns: direct relative-position encoding
+        zscores = pd.DataFrame(index=base_df.index)
+        for col in zscore_cols:
+            m = grp_market[col].transform("mean")
+            s = market_stds[f"market_{col}_std"]
+            zscores[f"market_{col}_z"] = ((base_df[col] - m) / (s + 1e-8)).to_numpy(dtype=np.float32)
+
+        # Market means for remaining columns (common factor)
+        market_means = grp_market[mean_only_cols].transform("mean")
+        market_means.columns = [f"market_{col}" for col in mean_only_cols]
+
+        base_df = pd.concat([base_df, zscores, market_means, market_stds], axis=1)
 
         cs_cols = [
             "trade_imb",
