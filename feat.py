@@ -257,6 +257,11 @@ class MeowFeatureGenerator(object):
             "trade_count_share_x_trade_imb_rank_cs",
             "depth_pressure_04_x_ob_imb0_rank_cs",
             "spread_x_high_minus_low_rank_cs",
+            "trade_imb_rank_cs_cu",
+            "high_gap_rank_cs_cu",
+            "trade_vwad_gap_rank_cs_cu",
+            "high_minus_low_rank_cs_cu",
+            "low_gap_rank_cs_cu",
 
             "interval_frac_centered",
             "interval_u",
@@ -582,6 +587,20 @@ class MeowFeatureGenerator(object):
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
 
+        # Cubic terms: capture skew/asymmetry, bounded [-0.125, 0.125]
+        _cubic_cols = [
+            "trade_imb_rank_cs",
+            "high_gap_rank_cs",
+            "trade_vwad_gap_rank_cs",
+            "high_minus_low_rank_cs",
+            "low_gap_rank_cs",
+        ]
+        cubic_df = pd.DataFrame(index=df.index)
+        for col in _cubic_cols:
+            short = col.replace("_rank_cs", "")
+            vals = rank_df[col].to_numpy(dtype=np.float32, copy=False)
+            cubic_df[f"{short}_rank_cs_cu"] = vals * vals * vals
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -673,6 +692,7 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                cubic_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
