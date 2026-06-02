@@ -19,7 +19,7 @@ from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "ridge").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
