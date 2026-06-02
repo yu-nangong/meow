@@ -315,6 +315,10 @@ class MeowFeatureGenerator(object):
             "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
             "depth_pressure_04", "range_pos", "turnover_imb",
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+            "ret12", "ret24", "high_minus_low", "last_mid_dev",
+            "ob_imb_front_back", "ob_imb_inner_outer",
+            "buy_vwad_dev", "sell_vwad_dev", "trade_vwad_gap",
+            "depth_pressure_slope",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
@@ -507,6 +511,10 @@ class MeowFeatureGenerator(object):
             "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
             "depth_pressure_04", "range_pos", "turnover_imb",
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+            "ret12", "ret24", "high_minus_low", "last_mid_dev",
+            "ob_imb_front_back", "ob_imb_inner_outer",
+            "buy_vwad_dev", "sell_vwad_dev", "trade_vwad_gap",
+            "depth_pressure_slope",
         ]
         symz_available = [c for c in symz_cols if c in base_df.columns]
         if symz_available:
