@@ -11,10 +11,11 @@ class PanelSeasonalityResidual:
 
     def __init__(self):
         self.enabled = os.environ.get("MEOW_ENABLE_PANEL_SEASONALITY", "1") != "0"
-        self.blend = float(os.environ.get("MEOW_PANEL_SEASONALITY_BLEND", "0.06"))
+        self.blend = float(os.environ.get("MEOW_PANEL_SEASONALITY_BLEND", "0.12"))
         self.tail_days = int(os.environ.get("MEOW_PANEL_SEASONALITY_TAIL_DAYS", "40"))
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_INTERVAL_ALPHA", "20.0"))
+        self.recency_half_life = float(os.environ.get("MEOW_PANEL_SEASONALITY_RECENCY_HALF_LIFE", "0"))
         self.pair_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_PAIR_ALPHA", "40.0"))
         self._global_sum = 0.0
         self._global_count = 0
@@ -29,31 +30,31 @@ class PanelSeasonalityResidual:
         self._interval_mean = {}
         self._pair_mean = {}
 
-    def partial_fit(self, ydf: pd.DataFrame, resid: np.ndarray) -> None:
+    def partial_fit(self, ydf: pd.DataFrame, resid: np.ndarray, recency_weight: float = 1.0) -> None:
         if not self.enabled or not self.blend or len(ydf) == 0:
             return
         frame = ydf.index.to_frame(index=False).loc[:, ["symbol", "interval"]].copy()
         frame["resid"] = np.asarray(resid, dtype=np.float64)
 
-        self._global_sum += float(frame["resid"].sum())
-        self._global_count += int(len(frame))
+        self._global_sum += recency_weight * float(frame["resid"].sum())
+        self._global_count += recency_weight * int(len(frame))
 
         symbol_stats = frame.groupby("symbol", sort=False)["resid"].agg(["sum", "count"])
         for symbol, row in symbol_stats.iterrows():
-            self._symbol_sum[symbol] = self._symbol_sum.get(symbol, 0.0) + float(row["sum"])
-            self._symbol_count[symbol] = self._symbol_count.get(symbol, 0) + int(row["count"])
+            self._symbol_sum[symbol] = self._symbol_sum.get(symbol, 0.0) + recency_weight * float(row["sum"])
+            self._symbol_count[symbol] = self._symbol_count.get(symbol, 0) + recency_weight * int(row["count"])
 
         interval_stats = frame.groupby("interval", sort=False)["resid"].agg(["sum", "count"])
         for interval, row in interval_stats.iterrows():
             key = int(interval)
-            self._interval_sum[key] = self._interval_sum.get(key, 0.0) + float(row["sum"])
-            self._interval_count[key] = self._interval_count.get(key, 0) + int(row["count"])
+            self._interval_sum[key] = self._interval_sum.get(key, 0.0) + recency_weight * float(row["sum"])
+            self._interval_count[key] = self._interval_count.get(key, 0) + recency_weight * int(row["count"])
 
         pair_stats = frame.groupby(["symbol", "interval"], sort=False)["resid"].agg(["sum", "count"])
         for (symbol, interval), row in pair_stats.iterrows():
             key = (symbol, int(interval))
-            self._pair_sum[key] = self._pair_sum.get(key, 0.0) + float(row["sum"])
-            self._pair_count[key] = self._pair_count.get(key, 0) + int(row["count"])
+            self._pair_sum[key] = self._pair_sum.get(key, 0.0) + recency_weight * float(row["sum"])
+            self._pair_count[key] = self._pair_count.get(key, 0) + recency_weight * int(row["count"])
 
     def finalize_fit(self) -> None:
         if not self._global_count:

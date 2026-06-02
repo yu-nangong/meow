@@ -181,14 +181,19 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     panel_residual = PanelSeasonalityResidual()
     if panel_residual.enabled and panel_residual.blend:
         panel_dates = train_dates[-panel_residual.tail_days :] if panel_residual.tail_days > 0 else train_dates
-        for chunk in _chunk_dates(panel_dates, N_CHUNKS):
+        panel_chunks = _chunk_dates(panel_dates, N_CHUNKS)
+        for chunk_idx, chunk in enumerate(panel_chunks):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
-            panel_residual.partial_fit(ydf, resid)
+            recency_weight = 1.0
+            if panel_residual.recency_half_life > 0:
+                age = panel_residual.tail_days * (len(panel_chunks) - 1 - chunk_idx) / max(len(panel_chunks), 1)
+                recency_weight = float(np.exp(-np.log(2) * age / panel_residual.recency_half_life))
+            panel_residual.partial_fit(ydf, resid, recency_weight=recency_weight)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
 
