@@ -16,6 +16,7 @@ class PanelSeasonalityResidual:
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_INTERVAL_ALPHA", "20.0"))
         self.pair_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_PAIR_ALPHA", "40.0"))
+        self.half_life_days = float(os.environ.get("MEOW_PANEL_SEASONALITY_HALF_LIFE_DAYS", "20"))
         self._global_sum = 0.0
         self._global_count = 0
         self._symbol_sum = {}
@@ -28,11 +29,31 @@ class PanelSeasonalityResidual:
         self._symbol_mean = {}
         self._interval_mean = {}
         self._pair_mean = {}
+        self._last_max_date = 0
+
+    def _decay_stale(self, day_gap: float) -> None:
+        """Apply exponential decay to all accumulated statistics."""
+        if day_gap <= 0 or self.half_life_days <= 0:
+            return
+        factor = float(np.exp(-day_gap / self.half_life_days))
+        self._global_sum *= factor
+        self._global_count = int(round(self._global_count * factor))
+        for d in (self._symbol_sum, self._interval_sum, self._pair_sum):
+            for k in list(d.keys()):
+                d[k] *= factor
+        for d in (self._symbol_count, self._interval_count, self._pair_count):
+            for k in list(d.keys()):
+                d[k] = max(1, int(round(d[k] * factor)))
 
     def partial_fit(self, ydf: pd.DataFrame, resid: np.ndarray) -> None:
         if not self.enabled or not self.blend or len(ydf) == 0:
             return
         frame = ydf.index.to_frame(index=False).loc[:, ["symbol", "interval"]].copy()
+        dates = ydf.index.get_level_values("date").unique()
+        current_max_date = int(dates.max()) if len(dates) > 0 else 0
+        if self._last_max_date > 0 and current_max_date > self._last_max_date:
+            self._decay_stale(float(current_max_date - self._last_max_date))
+        self._last_max_date = max(self._last_max_date, current_max_date)
         frame["resid"] = np.asarray(resid, dtype=np.float64)
 
         self._global_sum += float(frame["resid"].sum())
