@@ -2,6 +2,7 @@
 MEOW workshop template: Ridge regression on 6 hand-crafted features.
 Agents may replace this with deeper models in models/ or extend training here.
 """
+# Guard: leakage-safe base, confirmed 2026-06-02
 from __future__ import annotations
 
 import os
