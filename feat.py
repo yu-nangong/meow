@@ -242,6 +242,11 @@ class MeowFeatureGenerator(object):
             "market_ret12_resid_std",
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
+            "trade_imb_x_ret1_rank_cs",
+            "flow_imb_x_depth_pressure_04_rank_cs",
+            "high_minus_low_x_ret1_rank_cs",
+            "micro_dev_x_trade_imb_rank_cs",
+            "spread_x_depth_pressure_04_rank_cs",
 
             "interval_frac_centered",
             "interval_u",
@@ -539,6 +544,24 @@ class MeowFeatureGenerator(object):
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
 
+        # Pairwise rank_cs interactions: bounded nonlinear combinations.
+        # Both sides are [-0.5, 0.5] so the product is [-0.25, 0.25], well-behaved.
+        _pair_pairs = [
+            ("trade_imb_rank_cs", "ret1_rank_cs"),
+            ("flow_imb_rank_cs", "depth_pressure_04_rank_cs"),
+            ("high_minus_low_rank_cs", "ret1_rank_cs"),
+            ("micro_dev_rank_cs", "trade_imb_rank_cs"),
+            ("spread_rank_cs", "depth_pressure_04_rank_cs"),
+        ]
+        pair_int_df = pd.DataFrame(index=df.index)
+        for a, b in _pair_pairs:
+            short_a = a.replace("_rank_cs", "")
+            short_b = b.replace("_rank_cs", "")
+            pair_int_df[f"{short_a}_x_{short_b}_rank_cs"] = (
+                rank_df[a].to_numpy(dtype=np.float32, copy=False)
+                * rank_df[b].to_numpy(dtype=np.float32, copy=False)
+            )
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -629,6 +652,7 @@ class MeowFeatureGenerator(object):
                 base_df,
                 cs_out,
                 rank_df,
+                pair_int_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
