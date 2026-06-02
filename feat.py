@@ -242,6 +242,21 @@ class MeowFeatureGenerator(object):
             "market_ret12_resid_std",
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
+            "ret1_zs",
+            "ret3_zs",
+            "ret6_zs",
+            "ret12_zs",
+            "ret24_zs",
+            "trade_imb_zs",
+            "ob_imb0_zs",
+            "spread_zs",
+            "micro_dev_zs",
+            "flow_imb_zs",
+            "high_minus_low_zs",
+            "ret12_resid_zs",
+            "trade_count_share_zs",
+            "depth_pressure_04_zs",
+
 
             "interval_frac_centered",
             "interval_u",
@@ -459,6 +474,7 @@ class MeowFeatureGenerator(object):
             for col in zs_out.columns:
                 base_df[col] = zs_out[col].to_numpy(dtype=np.float32)
 
+
         # Market-wide cross-symbol features: capture common factor information
         # from the full cross-section of stocks at each point in time.
         market_cols = [
@@ -474,6 +490,14 @@ class MeowFeatureGenerator(object):
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
         base_df = pd.concat([base_df, market_means, market_stds], axis=1)
+
+        # Per-symbol z-scores: normalized deviation from market mean.
+        # Captures magnitude of outlier positions (rank_cs only gives ordering).
+        market_zs_vals = (base_df[market_cols].to_numpy(dtype=np.float64) - market_means.to_numpy(dtype=np.float64)) / np.maximum(market_stds.to_numpy(dtype=np.float64), 1e-8)
+        market_zs = pd.DataFrame(market_zs_vals, index=base_df.index, columns=[f"{col}_zs" for col in market_cols])
+        for col in market_zs.columns:
+            base_df[col] = market_zs[col].to_numpy(dtype=np.float32)
+        del market_zs_vals, market_zs
 
         cs_cols = [
             "trade_imb",
