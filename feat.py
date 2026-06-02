@@ -214,6 +214,23 @@ class MeowFeatureGenerator(object):
             "tradeSellQty_zs",
             "bsize0_zs",
             "asize0_zs",
+            "market_ret1",
+            "market_ret3",
+            "market_ret6",
+            "market_ret12",
+            "market_ret24",
+            "market_trade_imb",
+            "market_ob_imb0",
+            "market_spread",
+            "market_micro_dev",
+            "market_flow_imb",
+            "market_high_minus_low",
+            "market_ret12_resid",
+            "market_trade_count_share",
+            "market_depth_pressure_04",
+            "market_ret1_std",
+            "market_trade_imb_std",
+            "market_spread_std",
 
             "interval_frac_centered",
             "interval_u",
@@ -430,6 +447,22 @@ class MeowFeatureGenerator(object):
             zs_out.columns = [f"{n}" for n in zs_feats]
             for col in zs_out.columns:
                 base_df[col] = zs_out[col].to_numpy(dtype=np.float32)
+
+        # Market-wide cross-symbol features: capture common factor information
+        # from the full cross-section of stocks at each point in time.
+        market_cols = [
+            "ret1", "ret3", "ret6", "ret12", "ret24",
+            "trade_imb", "ob_imb0", "spread", "micro_dev",
+            "flow_imb", "high_minus_low", "ret12_resid",
+            "trade_count_share", "depth_pressure_04",
+        ]
+        grp_market = base_df[market_cols].groupby([df["date"], df["interval"]], sort=False)
+        market_means = grp_market.transform("mean")
+        market_means.columns = [f"market_{col}" for col in market_cols]
+        market_std_cols = ["ret1", "trade_imb", "spread"]
+        market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
+        market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
+        base_df = pd.concat([base_df, market_means, market_stds], axis=1)
 
         cs_cols = [
             "trade_imb",
