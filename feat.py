@@ -258,6 +258,15 @@ class MeowFeatureGenerator(object):
             "depth_pressure_04_x_ob_imb0_rank_cs",
             "spread_x_high_minus_low_rank_cs",
 
+            "abs_trade_imb_x_ret1_rank_cs",
+            "abs_flow_imb_x_ret1_rank_cs",
+            "abs_ob_imb0_x_trade_imb_rank_cs",
+            "abs_spread_x_trade_imb_rank_cs",
+            "abs_high_minus_low_x_ret1_rank_cs",
+            "abs_micro_dev_x_trade_imb_rank_cs",
+            "abs_depth_pressure_04_x_trade_imb_rank_cs",
+            "abs_ret1_x_trade_imb_rank_cs",
+
             "interval_frac_centered",
             "interval_u",
             "interval_frac_sq",
@@ -581,6 +590,27 @@ class MeowFeatureGenerator(object):
                 rank_df[a].to_numpy(dtype=np.float32, copy=False)
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
+        # Absolute-value interactions: |rank_cs_A| * rank_cs_B captures extremity * direction.
+        # Different from A*B: extremity (magnitude of deviation) interacting with direction.
+        _abs_pair_pairs = [
+            ("trade_imb_rank_cs", "ret1_rank_cs"),
+            ("flow_imb_rank_cs", "ret1_rank_cs"),
+            ("ob_imb0_rank_cs", "trade_imb_rank_cs"),
+            ("spread_rank_cs", "trade_imb_rank_cs"),
+            ("high_minus_low_rank_cs", "ret1_rank_cs"),
+            ("micro_dev_rank_cs", "trade_imb_rank_cs"),
+            ("depth_pressure_04_rank_cs", "trade_imb_rank_cs"),
+            ("ret1_rank_cs", "trade_imb_rank_cs"),
+        ]
+        abs_pair_int_df = pd.DataFrame(index=df.index)
+        for a, b in _abs_pair_pairs:
+            short_a = a.replace("_rank_cs", "")
+            short_b = b.replace("_rank_cs", "")
+            abs_pair_int_df[f"abs_{short_a}_x_{short_b}_rank_cs"] = (
+                np.abs(rank_df[a].to_numpy(dtype=np.float32, copy=False))
+                * rank_df[b].to_numpy(dtype=np.float32, copy=False)
+            )
+
 
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
@@ -673,6 +703,7 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                abs_pair_int_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
