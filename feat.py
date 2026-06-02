@@ -133,6 +133,24 @@ class MeowFeatureGenerator(object):
             "ask_slope",
             "bid_curvature",
             "ask_curvature",
+            "bid_slope_04",
+            "bid_slope_49",
+            "bid_slope_919",
+            "ask_slope_04",
+            "ask_slope_49",
+            "ask_slope_919",
+            "spread_4",
+            "spread_9",
+            "spread_19",
+            "spread_slope",
+            "bid_curve_mid_deep",
+            "ask_curve_mid_deep",
+            "slope_asym",
+            "curvature_asym",
+            "slope_asym_04",
+            "slope_asym_49",
+            "slope_asym_919",
+            "book_center_dev",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -349,6 +367,24 @@ class MeowFeatureGenerator(object):
         features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
         features["bid_curvature"] = df["bid4"] - 0.5 * (df["bid0"] + df["bid9"])
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
+        features["bid_slope_04"] = (df["bid0"] - df["bid4"]) / (df["midpx"] + eps)
+        features["bid_slope_49"] = (df["bid4"] - df["bid9"]) / (df["midpx"] + eps)
+        features["bid_slope_919"] = (df["bid9"] - df["bid19"]) / (df["midpx"] + eps)
+        features["ask_slope_04"] = (df["ask4"] - df["ask0"]) / (df["midpx"] + eps)
+        features["ask_slope_49"] = (df["ask9"] - df["ask4"]) / (df["midpx"] + eps)
+        features["ask_slope_919"] = (df["ask19"] - df["ask9"]) / (df["midpx"] + eps)
+        features["spread_4"] = (df["ask4"] - df["bid4"]) / (df["midpx"] + eps)
+        features["spread_9"] = (df["ask9"] - df["bid9"]) / (df["midpx"] + eps)
+        features["spread_19"] = (df["ask19"] - df["bid19"]) / (df["midpx"] + eps)
+        features["spread_slope"] = features["spread"] - features["spread_19"]
+        features["bid_curve_mid_deep"] = df["bid9"] - 0.5 * (df["bid4"] + df["bid19"])
+        features["ask_curve_mid_deep"] = df["ask9"] - 0.5 * (df["ask4"] + df["ask19"])
+        features["slope_asym"] = features["bid_slope"] - features["ask_slope"]
+        features["curvature_asym"] = features["bid_curvature"] - features["ask_curvature"]
+        features["slope_asym_04"] = features["bid_slope_04"] - features["ask_slope_04"]
+        features["slope_asym_49"] = features["bid_slope_49"] - features["ask_slope_49"]
+        features["slope_asym_919"] = features["bid_slope_919"] - features["ask_slope_919"]
+        features["book_center_dev"] = (df["midpx"] - 0.5 * (df["bid0"] + df["ask0"])) / (df["midpx"] + eps)
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
