@@ -18,6 +18,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.lag_mlp_sequence_model import LagMLPSequenceModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -28,6 +29,8 @@ LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRI
 FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_TAIL_DAYS", "10"))
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
+SEQ_RESIDUAL_ENABLED = os.environ.get("MEOW_SEQ_RESIDUAL", "0") != "0"
+SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.15"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -191,16 +194,38 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             panel_residual.partial_fit(ydf, resid)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
+    lag_model = None
+    if SEQ_RESIDUAL_ENABLED:
+        lag_model = LagMLPSequenceModel()
+        lag_model.reset()
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            raw = raw.sort_values(["symbol", "date", "interval"], kind="mergesort").reset_index(drop=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+            forecast = forecast + panel_residual.predict(ydf)
+            resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
+            raw["fret12"] = resid
+            lag_model.partial_fit(raw)
+            del raw, xdf, ydf, forecast, resid
+        lag_model.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        raw = raw.sort_values(["symbol", "date", "interval"], kind="mergesort").reset_index(drop=True)
         xdf, ydf = feat_gen.genFeatures(raw)
+        if lag_model is not None:
+            lag_pred = lag_model.predict(raw)
+        else:
+            lag_pred = np.zeros(len(raw), dtype=np.float64)
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
+        forecast = forecast + SEQ_BLEND_WEIGHT * lag_pred
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
