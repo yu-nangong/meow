@@ -135,6 +135,8 @@ class MeowFeatureGenerator(object):
             "ask_curvature",
             "bid_size_slope",
             "ask_size_slope",
+            "bid_trade_intensity",
+            "ask_trade_intensity",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -353,6 +355,8 @@ class MeowFeatureGenerator(object):
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
         features["bid_size_slope"] = (df["bsize0_4"] - df["bsize10_19"]) / (df["bsize0_4"] + df["bsize10_19"] + eps)
         features["ask_size_slope"] = (df["asize0_4"] - df["asize10_19"]) / (df["asize0_4"] + df["asize10_19"] + eps)
+        features["bid_trade_intensity"] = np.log1p(df["tradeBuyQty"] / (df["bsize0_4"] + df["bsize5_9"] + df["bsize10_19"] + eps))
+        features["ask_trade_intensity"] = np.log1p(df["tradeSellQty"] / (df["asize0_4"] + df["asize5_9"] + df["asize10_19"] + eps))
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
