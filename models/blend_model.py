@@ -25,9 +25,9 @@ class BlendModel:
         self._lgb.reset()
         self._ridge.reset()
 
-    def partial_fit(self, xdf, ydf):
+    def partial_fit(self, xdf, ydf, sample_weight=None):
         self._lgb.partial_fit(xdf, ydf)
-        self._ridge.partial_fit(xdf, ydf)
+        self._ridge.partial_fit(xdf, ydf, sample_weight=sample_weight)
 
     def finalize_fit(self):
         self._lgb.finalize_fit()
