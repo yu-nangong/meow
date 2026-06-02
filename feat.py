@@ -104,6 +104,9 @@ class MeowFeatureGenerator(object):
             "spread9_cs",
             "spread19_cs",
             "spread_slope_cs",
+            "lob_vwap_spread_cs",
+            "bid_vwap_slope_cs",
+            "ask_vwap_slope_cs",
             "high_gap_cs",
             "trade_buy_high_gap_cs",
             "trade_sell_high_gap_cs",
@@ -150,6 +153,9 @@ class MeowFeatureGenerator(object):
             "spread19",
             "spread_slope",
             "ret6_x_flow",
+            "lob_vwap_spread",
+            "bid_vwap_slope",
+            "ask_vwap_slope",
             "trade_imb_rank_cs",
             "flow_imb_rank_cs",
             "micro_dev_rank_cs",
@@ -183,6 +189,9 @@ class MeowFeatureGenerator(object):
             "depth_pressure_59_rank_cs",
             "depth_pressure_1019_rank_cs",
             "depth_pressure_slope_rank_cs",
+            "lob_vwap_spread_rank_cs",
+            "bid_vwap_slope_rank_cs",
+            "ask_vwap_slope_rank_cs",
             "depth_pressure_curve_rank_cs",
             "near_share_imb_rank_cs",
             "top_queue_share_imb_rank_cs",
@@ -373,6 +382,11 @@ class MeowFeatureGenerator(object):
         features["spread9"] = (df["ask9"] - df["bid9"]) / (df["midpx"] + eps)
         features["spread19"] = (df["ask19"] - df["bid19"]) / (df["midpx"] + eps)
         features["spread_slope"] = features["spread"] - features["spread19"]
+        bid_vwap = (df["bid0"] * df["bsize0_4"] + df["bid4"] * df["bsize5_9"] + df["bid9"] * df["bsize10_19"]) / (bid_depth_total + eps)
+        ask_vwap = (df["ask0"] * df["asize0_4"] + df["ask4"] * df["asize5_9"] + df["ask9"] * df["asize10_19"]) / (ask_depth_total + eps)
+        features["lob_vwap_spread"] = (ask_vwap - bid_vwap) / (df["midpx"] + eps)
+        features["bid_vwap_slope"] = (bid_vwap - df["bid19"]) / (df["midpx"] + eps)
+        features["ask_vwap_slope"] = (df["ask19"] - ask_vwap) / (df["midpx"] + eps)
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
@@ -463,6 +477,9 @@ class MeowFeatureGenerator(object):
             "spread4",
             "spread9",
             "spread19",
+            "lob_vwap_spread",
+            "bid_vwap_slope",
+            "ask_vwap_slope",
             "spread_slope",
             "high_gap",
             "trade_buy_high_gap",
@@ -502,6 +519,9 @@ class MeowFeatureGenerator(object):
             "spread9",
             "spread19",
             "spread_slope",
+            "lob_vwap_spread",
+            "bid_vwap_slope",
+            "ask_vwap_slope",
             "ret12",
             "sell_vwad_dev",
             "depth_pressure_59",
