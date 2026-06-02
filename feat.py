@@ -133,6 +133,10 @@ class MeowFeatureGenerator(object):
             "ask_slope",
             "bid_curvature",
             "ask_curvature",
+            "spread4",
+            "spread9",
+            "spread19",
+            "spread_slope",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -349,6 +353,10 @@ class MeowFeatureGenerator(object):
         features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
         features["bid_curvature"] = df["bid4"] - 0.5 * (df["bid0"] + df["bid9"])
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
+        features["spread4"] = (df["ask4"] - df["bid4"]) / (df["midpx"] + eps)
+        features["spread9"] = (df["ask9"] - df["bid9"]) / (df["midpx"] + eps)
+        features["spread19"] = (df["ask19"] - df["bid19"]) / (df["midpx"] + eps)
+        features["spread_slope"] = features["spread"] - features["spread19"]
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
