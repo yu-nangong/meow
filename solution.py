@@ -16,7 +16,7 @@ from mdl import MeowModel
 from models.interval_residual import IntervalResidualRidge
 from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
-from models.panel_seasonality import PanelSeasonalityResidual
+from models.panel_seasonality_market import PanelSeasonalityMarketResidual
 from models.blend_model import BlendModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
@@ -178,7 +178,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
     interval_residual.finalize_fit()
-    panel_residual = PanelSeasonalityResidual()
+    panel_residual = PanelSeasonalityMarketResidual()
     if panel_residual.enabled and panel_residual.blend:
         panel_dates = train_dates[-panel_residual.tail_days :] if panel_residual.tail_days > 0 else train_dates
         for chunk in _chunk_dates(panel_dates, N_CHUNKS):
