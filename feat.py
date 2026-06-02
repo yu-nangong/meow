@@ -138,6 +138,21 @@ class MeowFeatureGenerator(object):
             "day_open_gap",
             "range_pos",
             "trade_count_share",
+            "trade_buy_low_gap",
+            "trade_sell_low_gap",
+            "trade_low_skew",
+            "trade_buy_range",
+            "trade_sell_range",
+            "add_buy_center_gap",
+            "add_sell_center_gap",
+            "add_buy_range",
+            "add_sell_range",
+            "cxl_buy_center_gap",
+            "cxl_sell_center_gap",
+            "cxl_buy_range",
+            "cxl_sell_range",
+            "add_range_skew",
+            "cxl_range_skew",
             "ret3_x_flow",
             "ret6_x_flow",
             "trade_imb_rank_cs",
@@ -409,6 +424,40 @@ class MeowFeatureGenerator(object):
             + df["nTradeSell"]
             + eps
         )
+        # --- Microstructure price extrema features ---
+        # Trade price LOW gaps: how far below midpx do trades execute?
+        # Complements existing HIGH gap features (trade_buy_high_gap, trade_sell_high_gap).
+        # LOW execution prices signal aggressive selling pressure not captured by HIGH.
+        features["trade_buy_low_gap"] = (df["midpx"] - df["tradeBuyLow"]) / (df["midpx"] + eps)
+        features["trade_sell_low_gap"] = (df["midpx"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+        features["trade_low_skew"] = features["trade_buy_low_gap"] - features["trade_sell_low_gap"]
+        features["trade_buy_range"] = (df["tradeBuyHigh"] - df["tradeBuyLow"]) / (df["midpx"] + eps)
+        features["trade_sell_range"] = (df["tradeSellHigh"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+
+        # Add order price extrema: where are new orders being placed in the book?
+        features["add_buy_center_gap"] = (
+            (df["addBuyHigh"] + df["addBuyLow"]) / (2.0 * df["midpx"] + eps) - 1.0
+        )
+        features["add_sell_center_gap"] = (
+            (df["addSellHigh"] + df["addSellLow"]) / (2.0 * df["midpx"] + eps) - 1.0
+        )
+        features["add_buy_range"] = (df["addBuyHigh"] - df["addBuyLow"]) / (df["midpx"] + eps)
+        features["add_sell_range"] = (df["addSellHigh"] - df["addSellLow"]) / (df["midpx"] + eps)
+
+        # Cancel order price extrema: where are orders being pulled from?
+        features["cxl_buy_center_gap"] = (
+            (df["cxlBuyHigh"] + df["cxlBuyLow"]) / (2.0 * df["midpx"] + eps) - 1.0
+        )
+        features["cxl_sell_center_gap"] = (
+            (df["cxlSellHigh"] + df["cxlSellLow"]) / (2.0 * df["midpx"] + eps) - 1.0
+        )
+        features["cxl_buy_range"] = (df["cxlBuyHigh"] - df["cxlBuyLow"]) / (df["midpx"] + eps)
+        features["cxl_sell_range"] = (df["cxlSellHigh"] - df["cxlSellLow"]) / (df["midpx"] + eps)
+
+        # Order flow aggression asymmetry: buy-side vs sell-side price dispersion
+        features["add_range_skew"] = features["add_buy_range"] - features["add_sell_range"]
+        features["cxl_range_skew"] = features["cxl_buy_range"] - features["cxl_sell_range"]
+
 
         features["ret1"] = sym_day["midpx"].pct_change(1)
         features["ret3"] = sym_day["midpx"].pct_change(3)
