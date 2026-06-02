@@ -18,24 +18,24 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
-        # Give LGB all features by default; tree splits capture nonlinear
-        # signal in time-interacted/cs features that Ridge linear coeffs miss.
+        # Keep tree inputs narrower than ridge by default; the explicit time-gated
+        # interaction families help the linear model more than the tree blend arm.
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
                 "MEOW_LGB_EXCLUDE_FAMILIES",
-                "",
-            ).split(",")
+                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+        # Give LGB all features by default; tree-based splits can capture nonlinear
+        # signal in time-interacted and cross-sectionally demeaned features that Ridge
+        # linear coefficients miss. Set env vars to restore narrow subset if needed.
+        # Keep tree inputs narrower than ridge by default; the explicit time-gated
+        # interaction families help the linear model more than the tree blend arm.
+        self.exclude_families = {
+            f.strip()
+            for f in os.environ.get(MEOW_LGB_EXCLUDE_FAMILIES, ).split(",")
             if f.strip()
         }
-        # No default exclusions; LGB sees the full feature set.
-        # Restore via MEOW_LGB_EXCLUDE_FAMILIES / _PATTERNS env if needed.
-        self.exclude_patterns = tuple(
-            pattern.strip()
-            for pattern in os.environ.get(
-                "MEOW_LGB_EXCLUDE_PATTERNS",
-                ""
-                ,
+                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
             ).split(",")
             if pattern.strip()
         )
