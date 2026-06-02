@@ -30,6 +30,10 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
+TIME_DECAY_LAMBDA = float(os.environ.get("MEOW_TIME_DECAY_LAMBDA", "0.0"))
+TRAIN_TAIL_DAYS = int(os.environ.get("MEOW_TRAIN_TAIL_DAYS", "0"))
+
+
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
     if not dates:
@@ -38,6 +42,18 @@ def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
     size = (len(dates) + n_chunks - 1) // n_chunks
     return [dates[i : i + size] for i in range(0, len(dates), size)]
 
+
+
+def _compute_date_weights(dates_in_chunk, all_train_dates):
+    """Compute exponential time-decay weights for date recency."""
+    if TIME_DECAY_LAMBDA <= 0.0:
+        return None
+    min_date = min(all_train_dates)
+    max_date = max(all_train_dates)
+    span = float(max_date - min_date) or 1.0
+    # Normalize date position to [0, 1] where 1 = most recent
+    norm = (dates_in_chunk - min_date) / span
+    return np.exp(TIME_DECAY_LAMBDA * (norm - 1.0))
 
 def _pearson_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     y_true = np.asarray(y_true, dtype=np.float64)
@@ -152,6 +168,8 @@ def _create_base_model():
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
+    if TRAIN_TAIL_DAYS > 0:
+        train_dates = train_dates[-TRAIN_TAIL_DAYS:]
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
     model.reset()
@@ -162,7 +180,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
-        model.partial_fit(xdf, y_train)
+        sample_weight = _compute_date_weights(
+            xdf.index.get_level_values("date").to_numpy(dtype=np.int32, copy=False),
+            train_dates,
+        )
+        model.partial_fit(xdf, y_train, sample_weight=sample_weight)
         del xdf, ydf, y_train
     model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK

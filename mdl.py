@@ -51,10 +51,11 @@ class MeowModel(object):
         self._coef = None
         self._intercept = 0.0
 
-    def partial_fit(self, xdf, ydf):
+    def partial_fit(self, xdf, ydf, sample_weight=None):
         xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
         y = ydf.to_numpy(dtype=np.float64).ravel()
+        w = np.asarray(sample_weight, dtype=np.float64).ravel() if sample_weight is not None else np.ones(len(y), dtype=np.float64)
         if self._XtX is None:
             self._n_features = x.shape[1]
             self._feature_names = list(xdf.columns)
@@ -62,12 +63,13 @@ class MeowModel(object):
             self._Xty = np.zeros(self._n_features, dtype=np.float64)
             self._sum_x = np.zeros(self._n_features, dtype=np.float64)
             self._sum_x2 = np.zeros(self._n_features, dtype=np.float64)
-        self._XtX += x.T @ x
-        self._Xty += x.T @ y
-        self._sum_x += x.sum(axis=0)
-        self._sum_x2 += np.square(x).sum(axis=0)
-        self._sum_y += y.sum()
-        self._n_rows += len(y)
+        self._XtX += x.T @ (x * w[:, np.newaxis])
+        self._Xty += (x * w[:, np.newaxis]).T @ y
+        self._sum_x += (x * w[:, np.newaxis]).sum(axis=0)
+        self._sum_x2 += np.square(x * w[:, np.newaxis]).sum(axis=0)
+        w_sum = w.sum()
+        self._sum_y += w @ y
+        self._n_rows += w_sum
 
     def finalize_fit(self):
         mean_x = self._sum_x / max(self._n_rows, 1)
