@@ -12,10 +12,10 @@ class PanelSeasonalityResidual:
     def __init__(self):
         self.enabled = os.environ.get("MEOW_ENABLE_PANEL_SEASONALITY", "1") != "0"
         self.blend = float(os.environ.get("MEOW_PANEL_SEASONALITY_BLEND", "0.12"))
-        self.tail_days = int(os.environ.get("MEOW_PANEL_SEASONALITY_TAIL_DAYS", "40"))
+        self.tail_days = int(os.environ.get("MEOW_PANEL_SEASONALITY_TAIL_DAYS", "50"))
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_INTERVAL_ALPHA", "20.0"))
-        self.pair_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_PAIR_ALPHA", "40.0"))
+        self.pair_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_PAIR_ALPHA", "20.0"))
         self.recency_half_life = float(os.environ.get("MEOW_PANEL_SEASONALITY_RECENCY_HALF_LIFE", "20"))
         self.reliability_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_RELIABILITY_ALPHA", "40.0"))
         self.default_reliability = float(os.environ.get("MEOW_PANEL_SEASONALITY_DEFAULT_RELIABILITY", "0.3"))
