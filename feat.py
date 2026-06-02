@@ -268,6 +268,36 @@ class MeowFeatureGenerator(object):
             "spread_x_ret1_rank_cs",
             "ob_imb0_x_flow_imb_rank_cs",
 
+            # Sign-based pairwise interactions: a * sign(b) captures direction-only
+            # interaction, complementing the product a * b which weights by both magnitudes.
+            # If both feature types help, b's direction and magnitude independently
+            # modulate a's predictive power.
+            "trade_imb_x_sign_ret1_rank_cs",
+            "flow_imb_x_sign_depth_pressure_04_rank_cs",
+            "high_minus_low_x_sign_ret1_rank_cs",
+            "micro_dev_x_sign_trade_imb_rank_cs",
+            "spread_x_sign_depth_pressure_04_rank_cs",
+            "ob_imb0_x_sign_ob_imb19_rank_cs",
+            "depth_pressure_04_x_sign_depth_pressure_1019_rank_cs",
+            "turnover_imb_x_sign_trade_imb_rank_cs",
+            "high_gap_x_sign_low_gap_rank_cs",
+            "buy_vwad_dev_x_sign_sell_vwad_dev_rank_cs",
+            "ret1_x_sign_ret6_rank_cs",
+            "ob_imb_front_back_x_sign_ob_imb_inner_outer_rank_cs",
+            "trade_count_share_x_sign_trade_imb_rank_cs",
+            "depth_pressure_04_x_sign_ob_imb0_rank_cs",
+            "spread_x_sign_high_minus_low_rank_cs",
+            "ret3_x_sign_ret12_rank_cs",
+            "ob_imb0_x_sign_trade_imb_rank_cs",
+            "micro_dev_x_sign_ret6_rank_cs",
+            "range_pos_x_sign_ret1_rank_cs",
+            "buy_vwad_dev_x_sign_trade_imb_rank_cs",
+            "sell_vwad_dev_x_sign_ret1_rank_cs",
+            "depth_pressure_slope_x_sign_trade_imb_rank_cs",
+            "ret6_x_sign_ret12_rank_cs",
+            "spread_x_sign_ret1_rank_cs",
+            "ob_imb0_x_sign_flow_imb_rank_cs",
+
             "interval_frac_centered",
             "interval_u",
             "interval_frac_sq",
@@ -600,6 +630,16 @@ class MeowFeatureGenerator(object):
             pair_int_df[f"{short_a}_x_{short_b}_rank_cs"] = (
                 rank_df[a].to_numpy(dtype=np.float32, copy=False)
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
+            )
+
+        # Sign-based pairwise interactions: a * sign(b) isolates direction-only
+        # interaction, stripping magnitude of the conditioning variable b.
+        for a, b in _pair_pairs:
+            short_a = a.replace("_rank_cs", "")
+            short_b = b.replace("_rank_cs", "")
+            pair_int_df[f"{short_a}_x_sign_{short_b}_rank_cs"] = (
+                rank_df[a].to_numpy(dtype=np.float32, copy=False)
+                * np.sign(rank_df[b].to_numpy(dtype=np.float32, copy=False))
             )
 
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
