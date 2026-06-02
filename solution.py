@@ -1,3 +1,4 @@
+# Verification eval: re-confirm winning 0.0803 base with leakage guards intact
 """
 MEOW workshop template: Ridge regression on 6 hand-crafted features.
 Agents may replace this with deeper models in models/ or extend training here.
