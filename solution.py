@@ -20,6 +20,7 @@ from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
 from models.deeplob_model import DeepLOBModel
+from models.nn_residual import NnResidualModel
 
 from models.pearson_nn import PearsonNNModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
@@ -34,6 +35,8 @@ FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADA
 SEQ_MODEL_ENABLED = os.environ.get("MEOW_SEQ_MODEL", "0") != "0"
 SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
 SEQ_MODEL_TYPE = os.environ.get("MEOW_SEQ_MODEL_TYPE", "mlp").strip().lower()
+NN_RESIDUAL_ENABLED = os.environ.get("MEOW_NN_RESIDUAL", "1") != "1"
+NN_RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_NN_RESIDUAL_BLEND", "0.15"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -199,6 +202,22 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             panel_residual.partial_fit(ydf, resid)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
+    nn_residual = None
+    if NN_RESIDUAL_ENABLED:
+        nn_residual = NnResidualModel()
+        nn_residual.reset()
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+            forecast = forecast + panel_residual.predict(ydf)
+            resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
+            nn_residual.partial_fit(xdf, resid)
+            del xdf, ydf, forecast, resid
+        nn_residual.finalize_fit()
+
     seq_model = None
     if SEQ_MODEL_ENABLED:
         if SEQ_MODEL_TYPE == "deeplob":
@@ -227,7 +246,12 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
-        forecast = forecast + SEQ_BLEND_WEIGHT * seq_pred
+        if nn_residual is not None:
+            nn_resid = nn_residual.predict(xdf)
+        else:
+            nn_resid = np.zeros(len(raw), dtype=np.float64)
+        forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_resid
+        forecast = (1.0 - SEQ_BLEND_WEIGHT) * forecast + SEQ_BLEND_WEIGHT * seq_pred
         ydf.loc[:, "forecast"] = forecast
         del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())
