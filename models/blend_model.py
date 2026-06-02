@@ -20,6 +20,7 @@ class BlendModel:
         self._lgb = LGBModel()
         self._ridge = MeowModel(cacheDir=None)
         self._lgb_weight = float(os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.7"))
+        self._learned_coef = None  # (a, b, c) for a*lgb + b*ridge + c
 
     def reset(self):
         self._lgb.reset()
@@ -34,6 +35,16 @@ class BlendModel:
         self._ridge.finalize_fit()
 
     def predict(self, xdf):
+        if self._learned_coef is not None:
+            a, b, c = self._learned_coef
+            return a * self._lgb.predict(xdf) + b * self._ridge.predict(xdf) + c
         lgb_pred = self._lgb.predict(xdf)
         ridge_pred = self._ridge.predict(xdf)
         return self._lgb_weight * lgb_pred + (1.0 - self._lgb_weight) * ridge_pred
+
+    def predict_sub(self, xdf):
+        """Return (lgb_pred, ridge_pred) for meta-blend learning."""
+        return self._lgb.predict(xdf), self._ridge.predict(xdf)
+
+    def set_learned_coef(self, a, b, c):
+        self._learned_coef = (float(a), float(b), float(c))

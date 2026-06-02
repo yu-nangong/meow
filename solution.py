@@ -22,6 +22,8 @@ from models.blend_model import BlendModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 RANK_TARGET_TRAINING = os.environ.get("MEOW_RANK_TARGET", "0") != "0"
+LEARNED_BLEND = os.environ.get("MEOW_LEARNED_BLEND", "0") != "0"
+LEARNED_BLEND_VAL_DAYS = int(os.environ.get("MEOW_LEARNED_BLEND_VAL_DAYS", "0"))
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.0"))
@@ -159,11 +161,18 @@ def _create_base_model():
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
+    if LEARNED_BLEND:
+        val_days = LEARNED_BLEND_VAL_DAYS or max(10, len(train_dates) // 6)
+        train_core_dates = train_dates[:-val_days]
+        train_val_dates = train_dates[-val_days:]
+    else:
+        train_core_dates = train_dates
+        train_val_dates = []
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
     model.reset()
 
-    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+    for chunk in _chunk_dates(train_core_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
@@ -172,6 +181,33 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
+
+    # Learn optimal blend coefficients from held-out validation data.
+    # Replaces the fixed MEOW_BLEND_LGB_WEIGHT (0.7) with a data-driven
+    # linear combination a*lgb + b*ridge + c fitted via OLS on validation.
+    if LEARNED_BLEND and isinstance(model, BlendModel) and train_val_dates:
+        lgb_parts = []
+        ridge_parts = []
+        y_parts = []
+        for chunk in _chunk_dates(train_val_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            lp, rp = model.predict_sub(xdf)
+            lgb_parts.append(lp)
+            ridge_parts.append(rp)
+            y_parts.append(ydf["fret12"].to_numpy(dtype=np.float64))
+            del xdf, ydf
+        lgb_all = np.concatenate(lgb_parts)
+        ridge_all = np.concatenate(ridge_parts)
+        y_all = np.concatenate(y_parts)
+        # Fit y = a*lgb + b*ridge + c via least squares
+        A = np.column_stack([lgb_all, ridge_all, np.ones(len(y_all))])
+        coef, _, _, _ = np.linalg.lstsq(A, y_all, rcond=None)
+        a, b, c = float(coef[0]), float(coef[1]), float(coef[2])
+        model.set_learned_coef(a, b, c)
+        from log import log
+        log.inf(f"Learned blend: a={a:.4f}*lgb + b={b:.4f}*ridge + c={c:.6f} (val={len(train_val_dates)}d)")
 
     skip_post = RANK_TARGET_TRAINING
     interval_residual = None
