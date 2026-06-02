@@ -555,7 +555,8 @@ class MeowFeatureGenerator(object):
         ]
         mkt_int_df = pd.DataFrame(index=df.index)
         for rcol, mcol in _mkt_int_pairs:
-            mkt_int_df[f"{rcol}_x_{mcol}"] = (
+            short_mcol = mcol.replace("market_", "mkt_")
+            mkt_int_df[f"{rcol}_x_{short_mcol}"] = (
                 rank_df[rcol].to_numpy(dtype=np.float32, copy=False)
                 * base_df[mcol].to_numpy(dtype=np.float32, copy=False)
             )
