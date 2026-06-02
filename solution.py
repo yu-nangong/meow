@@ -19,6 +19,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.raw_lob_mlp import RawLOBMLP
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -166,6 +167,19 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
+
+    # === Raw LOB MLP residual: learns microstructure patterns from raw order book ===
+    raw_lob_mlp = RawLOBMLP()
+    raw_lob_mlp.reset()
+    if raw_lob_mlp.enabled:
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            pred = model.predict(xdf)
+            resid = _train_target_array(ydf) - pred
+            raw_lob_mlp.partial_fit(raw, resid)
+            del raw, xdf, ydf, pred, resid
+        raw_lob_mlp.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
@@ -173,8 +187,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        base_pred = _postprocess_forecast(ydf, model.predict(xdf) + raw_lob_mlp.predict(raw), forecast_cs_mean_shrink)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
@@ -185,21 +198,19 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         for chunk in _chunk_dates(panel_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, ydf = feat_gen.genFeatures(raw)
-            del raw
-            forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            forecast = _postprocess_forecast(ydf, model.predict(xdf) + raw_lob_mlp.predict(raw), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
             panel_residual.partial_fit(ydf, resid)
-            del xdf, ydf, forecast, resid
+            del raw, xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
 
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         ydf = ydf.copy()
-        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = _postprocess_forecast(ydf, model.predict(xdf) + raw_lob_mlp.predict(raw), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
         ydf.loc[:, "forecast"] = forecast
