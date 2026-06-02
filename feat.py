@@ -129,6 +129,10 @@ class MeowFeatureGenerator(object):
             "high_vs_trade_high_gap",
             "add_turn_imb",
             "cxl_turn_imb",
+            "bid_slope",
+            "ask_slope",
+            "bid_curvature",
+            "ask_curvature",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -341,6 +345,10 @@ class MeowFeatureGenerator(object):
         )
         features["trade_high_skew"] = features["trade_buy_high_gap"] - features["trade_sell_high_gap"]
         features["high_vs_trade_high_gap"] = features["high_gap"] - features["trade_high_center_gap"]
+        features["bid_slope"] = (df["bid0"] - df["bid19"]) / (df["midpx"] + eps)
+        features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
+        features["bid_curvature"] = df["bid4"] - 0.5 * (df["bid0"] + df["bid9"])
+        features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
