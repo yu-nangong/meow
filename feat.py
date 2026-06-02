@@ -242,6 +242,12 @@ class MeowFeatureGenerator(object):
             "market_ret12_resid_std",
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
+            "market_ret1_iqr",
+            "market_trade_imb_iqr",
+            "market_spread_iqr",
+            "market_flow_imb_iqr",
+            "market_high_minus_low_iqr",
+            "market_ret12_resid_iqr",
 
             "interval_frac_centered",
             "interval_u",
@@ -459,6 +465,16 @@ class MeowFeatureGenerator(object):
             for col in zs_out.columns:
                 base_df[col] = zs_out[col].to_numpy(dtype=np.float32)
 
+        # Cross-symbol IQR: non-parametric dispersion, orthogonal to std
+        iqr_cols = ["ret1", "trade_imb", "spread", "flow_imb", "high_minus_low", "ret12_resid"]
+        grp_iqr = base_df[iqr_cols].groupby([df["date"], df["interval"]], sort=False)
+        def _iqr(s):
+            if len(s.dropna()) < 5:
+                return 0.0
+            return s.quantile(0.75) - s.quantile(0.25)
+        market_iqrs = grp_iqr.transform(_iqr)
+        market_iqrs.columns = [f"market_{col}_iqr" for col in iqr_cols]
+        base_df = pd.concat([base_df, market_iqrs], axis=1)
         # Market-wide cross-symbol features: capture common factor information
         # from the full cross-section of stocks at each point in time.
         market_cols = [
