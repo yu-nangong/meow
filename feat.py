@@ -84,6 +84,7 @@ class MeowFeatureGenerator(object):
             "ret6",
             "ret12",
             "ret24",
+            "ret1_vol",
             "trade_imb_ema6",
             "ob_imb0_ema6",
             "micro_dev_ema6",
@@ -154,6 +155,7 @@ class MeowFeatureGenerator(object):
             "range_pos_rank_cs",
             "last_mid_dev_rank_cs",
             "ret24_rank_cs",
+            "ret1_vol_rank_cs",
             "ob_imb4_rank_cs",
             "depth_pressure_04_rank_cs",
             "ob_imb0_rank_cs",
@@ -392,6 +394,11 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
 
+        # Microstructure volatility: trailing std of ret1 over 12 intervals
+        base_df.loc[:, "ret1_vol"] = base_sym_day["ret1"].transform(
+            lambda s: s.rolling(12, min_periods=1).std()
+        )
+
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
         # Type "rank": percentile rank within (date, interval) -> _rank_cs
@@ -462,6 +469,7 @@ class MeowFeatureGenerator(object):
             "range_pos",
             "last_mid_dev",
             "ret24",
+            "ret1_vol",
             "ob_imb4",
             "depth_pressure_04",
             "ob_imb0",
