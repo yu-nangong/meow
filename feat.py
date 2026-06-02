@@ -311,10 +311,19 @@ class MeowFeatureGenerator(object):
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         # Per-symbol z-score features
         _symz_base = [
-            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
-            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
-            "depth_pressure_04", "range_pos", "turnover_imb",
-            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+            "trade_imb", "flow_imb", "ob_imb0", "ob_imb4", "ob_imb9", "ob_imb19",
+            "ob_imb_front_back", "ob_imb_inner_outer",
+            "spread", "micro_dev", "last_mid_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "ret12", "ret24",
+            "high_gap", "low_gap", "high_minus_low",
+            "trade_buy_high_gap", "trade_sell_high_gap",
+            "depth_pressure_04", "depth_pressure_59", "depth_pressure_1019",
+            "depth_pressure_slope", "depth_pressure_curve",
+            "range_pos", "turnover_imb", "add_turn_imb",
+            "day_open_gap", "trade_count_share",
+            "buy_vwad_dev", "sell_vwad_dev", "trade_vwad_gap", "vwad_center_dev",
+            "trade_high_center_gap", "trade_high_skew", "high_vs_trade_high_gap",
+            "near_share_imb", "top_queue_share_imb",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
         # symz × rank_cs pairwise interactions (hybrid temporal × cross-sectional)
@@ -511,10 +520,19 @@ class MeowFeatureGenerator(object):
         # Per-symbol z-scores answer "how does this stock compare to its OWN HISTORY?"
         # These capture orthogonal within-stock temporal patterns.
         symz_cols = [
-            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
-            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
-            "depth_pressure_04", "range_pos", "turnover_imb",
-            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+            "trade_imb", "flow_imb", "ob_imb0", "ob_imb4", "ob_imb9", "ob_imb19",
+            "ob_imb_front_back", "ob_imb_inner_outer",
+            "spread", "micro_dev", "last_mid_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "ret12", "ret24",
+            "high_gap", "low_gap", "high_minus_low",
+            "trade_buy_high_gap", "trade_sell_high_gap",
+            "depth_pressure_04", "depth_pressure_59", "depth_pressure_1019",
+            "depth_pressure_slope", "depth_pressure_curve",
+            "range_pos", "turnover_imb", "add_turn_imb",
+            "day_open_gap", "trade_count_share",
+            "buy_vwad_dev", "sell_vwad_dev", "trade_vwad_gap", "vwad_center_dev",
+            "trade_high_center_gap", "trade_high_skew", "high_vs_trade_high_gap",
+            "near_share_imb", "top_queue_share_imb",
         ]
         symz_available = [c for c in symz_cols if c in base_df.columns]
         if symz_available:
