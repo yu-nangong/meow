@@ -133,6 +133,17 @@ class MeowFeatureGenerator(object):
             "ask_slope",
             "bid_curvature",
             "ask_curvature",
+            "bid_slope_04",
+            "ask_slope_04",
+            "bid_slope_49",
+            "ask_slope_49",
+            "bid_slope_919",
+            "ask_slope_919",
+            "bid_curvature_919",
+            "ask_curvature_919",
+            "slope_asym",
+            "curvature_asym",
+            "wmid_dev",
             "day_open_gap",
             "range_pos",
             "trade_count_share",
@@ -183,6 +194,17 @@ class MeowFeatureGenerator(object):
             "ask_slope_rank_cs",
             "bid_curvature_rank_cs",
             "ask_curvature_rank_cs",
+            "bid_slope_04_rank_cs",
+            "ask_slope_04_rank_cs",
+            "bid_slope_49_rank_cs",
+            "ask_slope_49_rank_cs",
+            "bid_slope_919_rank_cs",
+            "ask_slope_919_rank_cs",
+            "bid_curvature_919_rank_cs",
+            "ask_curvature_919_rank_cs",
+            "slope_asym_rank_cs",
+            "curvature_asym_rank_cs",
+            "wmid_dev_rank_cs",
             "midpx_level_rank_cs",
             "lastpx_level_rank_cs",
             "high_level_rank_cs",
@@ -353,6 +375,17 @@ class MeowFeatureGenerator(object):
         features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
         features["bid_curvature"] = df["bid4"] - 0.5 * (df["bid0"] + df["bid9"])
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
+        features["bid_slope_04"] = (df["bid0"] - df["bid4"]) / (df["midpx"] + eps)
+        features["ask_slope_04"] = (df["ask4"] - df["ask0"]) / (df["midpx"] + eps)
+        features["bid_slope_49"] = (df["bid4"] - df["bid9"]) / (df["midpx"] + eps)
+        features["ask_slope_49"] = (df["ask9"] - df["ask4"]) / (df["midpx"] + eps)
+        features["bid_slope_919"] = (df["bid9"] - df["bid19"]) / (df["midpx"] + eps)
+        features["ask_slope_919"] = (df["ask19"] - df["ask9"]) / (df["midpx"] + eps)
+        features["bid_curvature_919"] = df["bid9"] - 0.5 * (df["bid4"] + df["bid19"])
+        features["ask_curvature_919"] = df["ask9"] - 0.5 * (df["ask4"] + df["ask19"])
+        features["slope_asym"] = features["bid_slope"] - features["ask_slope"]
+        features["curvature_asym"] = features["bid_curvature"] - features["ask_curvature"]
+        features["wmid_dev"] = ((df["bid0"] * df["bsize0"] + df["ask0"] * df["asize0"]) / (df["bsize0"] + df["asize0"] + eps) - df["midpx"]) / (df["midpx"] + eps)
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
@@ -495,6 +528,17 @@ class MeowFeatureGenerator(object):
             "ask_slope",
             "bid_curvature",
             "ask_curvature",
+            "bid_slope_04",
+            "ask_slope_04",
+            "bid_slope_49",
+            "ask_slope_49",
+            "bid_slope_919",
+            "ask_slope_919",
+            "bid_curvature_919",
+            "ask_curvature_919",
+            "slope_asym",
+            "curvature_asym",
+            "wmid_dev",
         ]
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
