@@ -1,4 +1,4 @@
-"""Shrunk cross-day residual prior conditioned on market direction."""
+"""Shrunk cross-day residual prior conditioned on market direction and magnitude."""
 from __future__ import annotations
 
 import os
@@ -8,10 +8,10 @@ import pandas as pd
 
 
 class PanelSeasonalityMarketResidual:
-    """Conditional pair prior: market state = sign of cross-sectional mean fret12.
+    """Conditional pair prior: market state = direction + magnitude of CS mean fret12.
 
-    Two states: down (negative cs mean) and up (non-negative).
-    Double the pair keys but adds an informative conditioning dimension.
+    Three states: down (cs mean < -threshold), flat (|cs mean| <= threshold), up (cs mean > threshold).
+    Triple the pair keys, adding both direction and magnitude dimensions.
     """
 
     def __init__(self):
@@ -21,6 +21,7 @@ class PanelSeasonalityMarketResidual:
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_MS_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_MS_INTERVAL_ALPHA", "20.0"))
         self.pair_alpha = float(os.environ.get("MEOW_PANEL_MS_PAIR_ALPHA", "40.0"))
+        self.ms_threshold_k = float(os.environ.get("MEOW_PANEL_MS_THRESHOLD_K", "0.5"))
         self._global_sum = 0.0
         self._global_count = 0
         self._symbol_sum = {}
@@ -33,9 +34,10 @@ class PanelSeasonalityMarketResidual:
         self._symbol_mean = {}
         self._interval_mean = {}
         self._pair_mean = {}
+        self._cs_mean_std = 1e-8
 
     @staticmethod
-    def _market_state(ydf: pd.DataFrame) -> np.ndarray:
+    def _cs_mean_values(ydf: pd.DataFrame) -> np.ndarray:
         idx = ydf.index.to_frame(index=False)
         grp = pd.DataFrame({
             "date": idx["date"],
@@ -43,8 +45,7 @@ class PanelSeasonalityMarketResidual:
             "fret12": ydf["fret12"].to_numpy(dtype=np.float64, copy=False),
         })
         cs_mean = grp.groupby(["date", "interval"], sort=False)["fret12"].transform("mean")
-        raw = cs_mean.to_numpy(dtype=np.float64, copy=False)
-        return (raw >= 0).astype(np.int32)
+        return cs_mean.to_numpy(dtype=np.float64, copy=False)
 
     def partial_fit(self, ydf: pd.DataFrame, resid: np.ndarray) -> None:
         if not self.enabled or not self.blend or len(ydf) == 0:
@@ -66,7 +67,14 @@ class PanelSeasonalityMarketResidual:
             self._interval_sum[key] = self._interval_sum.get(key, 0.0) + float(row["sum"])
             self._interval_count[key] = self._interval_count.get(key, 0) + int(row["count"])
 
-        frame["ms"] = self._market_state(ydf)
+        cs_mean_raw = self._cs_mean_values(ydf)
+        chunk_std = float(np.std(cs_mean_raw[np.isfinite(cs_mean_raw)]))
+        if chunk_std > 0:
+            alpha = 0.1  # smoothing for threshold stability across chunks
+            self._cs_mean_std = (1 - alpha) * self._cs_mean_std + alpha * chunk_std
+        threshold = self.ms_threshold_k * self._cs_mean_std
+        # 0=down, 1=flat, 2=up
+        frame["ms"] = np.where(cs_mean_raw < -threshold, 0, np.where(cs_mean_raw > threshold, 2, 1)).astype(np.int32)
         pair_stats = frame.groupby(["symbol", "interval", "ms"], sort=False)["resid"].agg(["sum", "count"])
         for (symbol, interval, ms), row in pair_stats.iterrows():
             key = (symbol, int(interval), int(ms))
@@ -102,15 +110,18 @@ class PanelSeasonalityMarketResidual:
         if not self.enabled or not self.blend or len(ydf) == 0:
             return np.zeros(len(ydf), dtype=np.float64)
         keys = ydf.index.to_frame(index=False).loc[:, ["symbol", "interval"]]
-        ms = self._market_state(ydf)
+        cs_mean_raw = self._cs_mean_values(ydf)
+        threshold = self.ms_threshold_k * self._cs_mean_std
+        ms = np.where(cs_mean_raw < -threshold, 0, np.where(cs_mean_raw > threshold, 2, 1)).astype(np.int32)
         pred = np.empty(len(keys), dtype=np.float64)
         for idx, row in enumerate(keys.itertuples(index=False)):
             symbol = row.symbol
             interval = int(row.interval)
-            base_prior = (
+            pair_key = (symbol, interval, int(ms[idx]))
+            pred[idx] = self._pair_mean.get(
+                pair_key,
                 self._symbol_mean.get(symbol, self._global_mean)
                 + self._interval_mean.get(interval, self._global_mean)
-                - self._global_mean
+                - self._global_mean,
             )
-            pred[idx] = self._pair_mean.get((symbol, interval, ms[idx]), base_prior)
         return self.blend * pred
