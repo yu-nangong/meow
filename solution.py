@@ -22,7 +22,7 @@ from models.lag_mlp_sequence_model import LagMLPSequenceModel
 from models.deeplob_model import DeepLOBModel
 
 from models.pearson_nn import PearsonNNModel
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "pearson_nn").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
