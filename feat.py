@@ -261,6 +261,17 @@ class MeowFeatureGenerator(object):
         ]
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
+        feature_names.extend([
+            "mkt_trade_imb",
+            "mkt_flow_imb",
+            "mkt_ret1",
+            "mkt_spread",
+            "mkt_micro_dev",
+            "mkt_ret1_disp",
+            "mkt_ob_imb0",
+            "mkt_trade_imb_disp",
+            "mkt_ret6_disp",
+        ])
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
 
@@ -383,6 +394,19 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
+
+        # === Market-level aggregate features per (date, interval) ===
+        # Capture market regime information on an orthogonal axis to symbol-level features.
+        mkt_grp = base_df.groupby([df["date"], df["interval"]], sort=False)
+        base_df.loc[:, "mkt_trade_imb"] = mkt_grp["trade_imb"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_flow_imb"] = mkt_grp["flow_imb"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_ret1"] = mkt_grp["ret1"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_spread"] = mkt_grp["spread"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_micro_dev"] = mkt_grp["micro_dev"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_ret1_disp"] = mkt_grp["ret1"].transform("std").fillna(0.0).to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_ob_imb0"] = mkt_grp["ob_imb0"].transform("mean").to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_trade_imb_disp"] = mkt_grp["trade_imb"].transform("std").fillna(0.0).to_numpy(dtype=np.float32)
+        base_df.loc[:, "mkt_ret6_disp"] = mkt_grp["ret6"].transform("std").fillna(0.0).to_numpy(dtype=np.float32)
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
