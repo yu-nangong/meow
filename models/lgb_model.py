@@ -112,6 +112,10 @@ class LGBModel:
         x = xdf[self._feature_names].to_numpy(dtype=np.float32)
         return self._model.predict(x).astype(np.float64)
 
+
+    def replace_targets(self, new_y):
+        """Replace stored targets (e.g. with residuals after base model fit)."""
+        self._y_reservoir = np.asarray(new_y, dtype=np.float32).ravel()
     def _keep_column(self, name):
         if self.exclude_patterns and any(pattern in name for pattern in self.exclude_patterns):
             return False
