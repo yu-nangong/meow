@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from typing import Dict, List, Optional
+from scipy.optimize import minimize_scalar
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.lag_mlp_sequence_model import LagMLPSequenceModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -30,6 +32,9 @@ FORECAST_CS_MEAN_SHRINK_TAIL_DAYS = int(os.environ.get("MEOW_FORECAST_CS_MEAN_SH
 FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK_MAX", "1.0"))
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
+SEQ_MODEL_ENABLED = os.environ.get("MEOW_SEQ_MODEL", "0") != "0"
+SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
+LEARN_BLEND_WEIGHTS = os.environ.get("MEOW_LEARN_BLEND", "1") != "0"
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -173,6 +178,45 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del xdf, ydf, y_train
     model.finalize_fit()
 
+    # === Sequence model (post-pipeline signal) ===
+    seq_model = None
+    seq_blend_weight = SEQ_BLEND_WEIGHT
+    if SEQ_MODEL_ENABLED:
+        seq_model = LagMLPSequenceModel()
+        seq_model.reset()
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            seq_model.partial_fit(raw)
+            del raw
+        seq_model.finalize_fit()
+    
+    # === Learn blend weights via Pearson optimization ===
+    if LEARN_BLEND_WEIGHTS:
+        cal_dates = train_dates[-min(30, len(train_dates)):]
+        cal_y_true, cal_base, cal_seq = [], [], []
+        for chunk in _chunk_dates(cal_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            raw = raw.sort_values(["symbol", "date", "interval"], kind="mergesort")
+            xdf, ydf = feat_gen.genFeatures(raw)
+            cal_y_true.append(ydf["fret12"].to_numpy())
+            cal_base.append(model.predict(xdf))
+            if seq_model is not None:
+                cal_seq.append(seq_model.predict(raw))
+            del raw, xdf, ydf
+        cal_y = np.concatenate(cal_y_true)
+        cal_b = np.concatenate(cal_base)
+        if cal_seq:
+            cal_s = np.concatenate(cal_seq)
+            def _neg_pearson(w):
+                pred = (1.0 - w) * cal_b + w * cal_s
+                mask = np.isfinite(cal_y) & np.isfinite(pred)
+                if mask.sum() < 2:
+                    return 1.0
+                return -float(np.corrcoef(cal_y[mask], pred[mask])[0, 1])
+            res = minimize_scalar(_neg_pearson, bounds=(0.0, 0.6), method="bounded")
+            seq_blend_weight = float(np.clip(res.x, 0.0, 0.6))
+
+
     skip_post = RANK_TARGET_TRAINING
     interval_residual = None
     panel_residual = None
@@ -208,15 +252,20 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        raw = raw.sort_values(["symbol", "date", "interval"], kind="mergesort")
+        if seq_model is not None:
+            seq_pred = seq_model.predict(raw)
+        else:
+            seq_pred = np.zeros(len(raw), dtype=np.float64)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         if not skip_post:
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             forecast = forecast + panel_residual.predict(ydf)
+        forecast = forecast + seq_blend_weight * seq_pred
         ydf.loc[:, "forecast"] = forecast
-        del xdf
+        del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())
         p_parts.append(ydf["forecast"].to_numpy())
 

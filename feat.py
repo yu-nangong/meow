@@ -309,6 +309,14 @@ class MeowFeatureGenerator(object):
             "micro_dev_rank_cs_x_u",
         ]
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
+        # Per-symbol z-score features
+        _symz_base = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+        ]
+        feature_names.extend(f"{col}_symz" for col in _symz_base)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
@@ -489,6 +497,27 @@ class MeowFeatureGenerator(object):
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
         base_df = pd.concat([base_df, market_means, market_stds], axis=1)
+
+        # === Per-symbol z-score features ===
+        # Cross-sectional ranks answer "how does this stock compare to others NOW?"
+        # Per-symbol z-scores answer "how does this stock compare to its OWN HISTORY?"
+        # These capture orthogonal within-stock temporal patterns.
+        symz_cols = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+        ]
+        symz_available = [c for c in symz_cols if c in base_df.columns]
+        if symz_available:
+            sym_grp = base_df[symz_available].groupby(df["symbol"], sort=False)
+            sym_mean = sym_grp.transform("mean")
+            sym_std = sym_grp.transform("std")
+            sym_std = sym_std.where(sym_std > 1e-8, 1.0)
+            sym_z = (base_df[symz_available] - sym_mean) / sym_std
+            sym_z = sym_z.fillna(0.0)
+            sym_z.columns = [f"{col}_symz" for col in symz_available]
+            base_df = pd.concat([base_df, sym_z.astype(np.float32)], axis=1)
 
         cs_cols = [
             "trade_imb",
