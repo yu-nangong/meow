@@ -83,6 +83,7 @@ class PanelSeasonalityResidual:
     def predict(self, ydf: pd.DataFrame) -> np.ndarray:
         if not self.enabled or not self.blend or len(ydf) == 0:
             return np.zeros(len(ydf), dtype=np.float64)
+        assert "fret12" not in ydf.columns.tolist(), "panel_seasonality.predict() must not read test labels (fret12)"
         keys = ydf.index.to_frame(index=False).loc[:, ["symbol", "interval"]]
         pred = np.empty(len(keys), dtype=np.float64)
         for idx, row in enumerate(keys.itertuples(index=False)):
