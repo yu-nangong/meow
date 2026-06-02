@@ -242,6 +242,22 @@ class MeowFeatureGenerator(object):
             "market_ret12_resid_std",
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
+            # Cross-sectional higher moments: skew (distribution shape asymmetry)
+            "market_ret1_skew",
+            "market_trade_imb_skew",
+            "market_spread_skew",
+            "market_flow_imb_skew",
+            "market_high_minus_low_skew",
+            # Cross-sectional z-scores: (stock - market_mean) / market_std
+            # Normalizes per-stock features by current market regime
+            "ret1_z_market",
+            "trade_imb_z_market",
+            "ob_imb0_z_market",
+            "spread_z_market",
+            "micro_dev_z_market",
+            "flow_imb_z_market",
+            "high_minus_low_z_market",
+            "ret12_resid_z_market",
 
             "interval_frac_centered",
             "interval_u",
@@ -473,7 +489,23 @@ class MeowFeatureGenerator(object):
         market_std_cols = market_cols  # std for all 14 market columns
         market_stds = base_df[market_std_cols].groupby([df["date"], df["interval"]], sort=False).transform("std")
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
-        base_df = pd.concat([base_df, market_means, market_stds], axis=1)
+        # Market skew: cross-sectional higher moments — distribution shape asymmetry
+        skew_cols = ["ret1", "trade_imb", "spread", "flow_imb", "high_minus_low"]
+        market_skews = (base_df[skew_cols]
+            .groupby([df["date"], df["interval"]], sort=False)
+            .transform(lambda s: s.skew(skipna=True) if s.dropna().shape[0] >= 5 else 0.0))
+        market_skews.columns = [f"market_{col}_skew" for col in skew_cols]
+        base_df = pd.concat([base_df, market_means, market_stds, market_skews], axis=1)
+
+        # Cross-symbol z-scores: (stock_feature - market_mean) / (market_std + eps)
+        # Normalizes per-stock features by current market regime
+        eps = 1e-8
+        z_fwd_cols = ["ret1", "trade_imb", "ob_imb0", "spread", "micro_dev",
+                      "flow_imb", "high_minus_low", "ret12_resid"]
+        for col in z_fwd_cols:
+            z_col = f"{col}_z_market"
+            base_df[z_col] = (base_df[col] - base_df[f"market_{col}"]) / (
+                base_df[f"market_{col}_std"] + eps)
 
         cs_cols = [
             "trade_imb",
