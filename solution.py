@@ -21,6 +21,7 @@ from models.blend_model import BlendModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
+RANK_TARGET_TRAINING = os.environ.get("MEOW_RANK_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.0"))
@@ -76,6 +77,12 @@ def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
 
 def _train_target_array(ydf: pd.DataFrame) -> np.ndarray:
     target = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+    if RANK_TARGET_TRAINING:
+        dates = ydf.index.get_level_values("date")
+        intervals = ydf.index.get_level_values("interval")
+        s = pd.Series(target, index=ydf.index)
+        ranked = s.groupby([dates, intervals], sort=False, group_keys=False).rank(pct=True)
+        return (2.0 * ranked.to_numpy(dtype=np.float64) - 1.0)
     if not TRAIN_ON_INTERVAL_DEMEANED_TARGET:
         return target
     frame = pd.DataFrame(
@@ -165,21 +172,27 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
+
+    skip_post = RANK_TARGET_TRAINING
+    interval_residual = None
+    panel_residual = None
+
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
-    interval_residual = IntervalResidualRidge()
-    for chunk in _chunk_dates(train_dates, N_CHUNKS):
-        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
-        base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        resid = _train_target_array(ydf) - base_pred
-        interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
-        del xdf, ydf, base_pred, resid
-    interval_residual.finalize_fit()
+    if not skip_post:
+        interval_residual = IntervalResidualRidge()
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            resid = _train_target_array(ydf) - base_pred
+            interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
+            del xdf, ydf, base_pred, resid
+        interval_residual.finalize_fit()
     panel_residual = PanelSeasonalityResidual()
-    if panel_residual.enabled and panel_residual.blend:
+    if not skip_post and panel_residual.enabled and panel_residual.blend:
         panel_dates = train_dates[-panel_residual.tail_days :] if panel_residual.tail_days > 0 else train_dates
         for chunk in _chunk_dates(panel_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
@@ -199,8 +212,9 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
-        forecast = forecast + panel_residual.predict(ydf)
+        if not skip_post:
+            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+            forecast = forecast + panel_residual.predict(ydf)
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
