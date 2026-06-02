@@ -11,7 +11,7 @@ class PanelSeasonalityResidual:
 
     def __init__(self):
         self.enabled = os.environ.get("MEOW_ENABLE_PANEL_SEASONALITY", "1") != "0"
-        self.blend = float(os.environ.get("MEOW_PANEL_SEASONALITY_BLEND", "0.12"))
+        self.blend = float(os.environ.get("MEOW_PANEL_SEASONALITY_BLEND", "0.06"))
         self.tail_days = int(os.environ.get("MEOW_PANEL_SEASONALITY_TAIL_DAYS", "40"))
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_INTERVAL_ALPHA", "20.0"))
