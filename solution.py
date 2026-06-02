@@ -19,6 +19,7 @@ from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
+from models.deeplob_model import DeepLOBModel
 
 from models.pearson_nn import PearsonNNModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
@@ -32,6 +33,7 @@ FORECAST_CS_MEAN_SHRINK_MAX = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK
 FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADAPTIVE_BETA", "0.0"))
 SEQ_MODEL_ENABLED = os.environ.get("MEOW_SEQ_MODEL", "0") != "0"
 SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
+SEQ_MODEL_TYPE = os.environ.get("MEOW_SEQ_MODEL_TYPE", "mlp").strip().lower()
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -199,7 +201,10 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         panel_residual.finalize_fit()
     seq_model = None
     if SEQ_MODEL_ENABLED:
-        seq_model = LagMLPSequenceModel()
+        if SEQ_MODEL_TYPE == "deeplob":
+            seq_model = DeepLOBModel()
+        else:
+            seq_model = LagMLPSequenceModel()
         seq_model.reset()
         for chunk in _chunk_dates(train_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
