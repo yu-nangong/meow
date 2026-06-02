@@ -267,6 +267,12 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
         ]
+        # Cross-stock market microstructure — completely new signal dimension
+        feature_names.extend([
+            "market_trade_imb", "market_ob_imb0", "market_ret1",
+            "market_micro_dev", "market_trade_dispersion",
+            "market_breadth",
+        ])
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
@@ -403,6 +409,22 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
+
+        # === Cross-stock market microstructure features ===
+        # Market-level aggregates per (date, interval) — captures regime info
+        # orthogonal to per-stock rank/centered features.
+        market_grp = base_df[["trade_imb", "ob_imb0", "ret1", "micro_dev"]].groupby(
+            [df["date"], df["interval"]], sort=False
+        )
+        market_means = market_grp.transform("mean")
+        market_stds = market_grp.transform("std").fillna(0.0)
+        base_df["market_trade_imb"] = market_means["trade_imb"].to_numpy(dtype=np.float32)
+        base_df["market_ob_imb0"] = market_means["ob_imb0"].to_numpy(dtype=np.float32)
+        base_df["market_ret1"] = market_means["ret1"].to_numpy(dtype=np.float32)
+        base_df["market_micro_dev"] = market_means["micro_dev"].to_numpy(dtype=np.float32)
+        base_df["market_trade_dispersion"] = market_stds["trade_imb"].to_numpy(dtype=np.float32)
+        base_df["market_breadth"] = base_df["trade_imb"].groupby(
+            [df["date"], df["interval"]], sort=False).transform(lambda s: (s > 0).mean()).to_numpy(dtype=np.float32)
 
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
