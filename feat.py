@@ -311,6 +311,18 @@ class MeowFeatureGenerator(object):
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
+        # Cross-interval delta features: capture within-stock temporal dynamics.
+        # Each delta = rank_cs(t) - rank_cs(t-1) for same (symbol, date).
+        _cross_interval_cols = [
+            "trade_imb_rank_cs", "flow_imb_rank_cs", "ret1_rank_cs",
+            "ret6_rank_cs", "micro_dev_rank_cs", "spread_rank_cs",
+            "ob_imb0_rank_cs", "high_minus_low_rank_cs",
+            "depth_pressure_04_rank_cs",
+        ]
+        for col in _cross_interval_cols:
+            feature_names.append(f"{col}_d1")
+        for col in ["trade_imb_rank_cs", "ret1_rank_cs", "flow_imb_rank_cs"]:
+            feature_names.append(f"{col}_d3")
         return feature_names
 
     def __init__(self, cacheDir):
@@ -582,6 +594,31 @@ class MeowFeatureGenerator(object):
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
 
+        # Cross-interval delta features: rank_cs(t) - rank_cs(t-1) within same (symbol, date).
+        # Captures intra-day momentum/reversal in cross-sectional rank.
+        _cross_interval_key_cols = [
+            "trade_imb_rank_cs",
+            "flow_imb_rank_cs",
+            "ret1_rank_cs",
+            "ret6_rank_cs",
+            "micro_dev_rank_cs",
+            "spread_rank_cs",
+            "ob_imb0_rank_cs",
+            "high_minus_low_rank_cs",
+            "depth_pressure_04_rank_cs",
+        ]
+        # Group within same stock+date (df already sorted by symbol, date, interval)
+        cross_grp = rank_df[_cross_interval_key_cols].groupby(
+            [df["symbol"], df["date"]], sort=False
+        )
+        cross_delta_df = cross_grp.diff().fillna(0.0)
+        cross_delta_df.columns = [f"{col}_d1" for col in _cross_interval_key_cols]
+
+        # Also add lag-3 delta for the top 3 momentum features
+        _cross_interval_t3 = ["trade_imb_rank_cs", "ret1_rank_cs", "flow_imb_rank_cs"]
+        cross_d3_df = cross_grp[_cross_interval_t3].diff(periods=3).fillna(0.0)
+        cross_d3_df.columns = [f"{col}_d3" for col in _cross_interval_t3]
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -673,6 +710,8 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                cross_delta_df,
+                cross_d3_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
