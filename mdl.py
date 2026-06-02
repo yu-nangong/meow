@@ -1,3 +1,9 @@
+"""MEOW Ridge model with optional PCA feature orthogonalization.
+
+When MEOW_PCA_N_COMPONENTS > 0, features are projected onto the top-K
+principal components before Ridge fitting. PCA creates perfectly
+orthogonal features, eliminating collinearity structurally.
+"""
 import os
 import numpy as np
 from log import log
@@ -22,6 +28,8 @@ class MeowModel(object):
         self.exclude_patterns = tuple(
             pattern.strip() for pattern in os.environ.get("MEOW_EXCLUDE_PATTERNS", "").split(",") if pattern.strip()
         )
+        self.pca_n_components = int(os.environ.get("MEOW_PCA_N_COMPONENTS", "0"))
+        self.pca_alpha = float(os.environ.get("MEOW_PCA_ALPHA", "0.003"))
         self._XtX = None
         self._Xty = None
         self._n_features = None
@@ -35,6 +43,8 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._pca_V = None
+        self._pca_coef = None
 
     def reset(self):
         self._XtX = None
@@ -50,6 +60,8 @@ class MeowModel(object):
         self._scale_x = None
         self._coef = None
         self._intercept = 0.0
+        self._pca_V = None
+        self._pca_coef = None
 
     def partial_fit(self, xdf, ydf):
         xdf = self._select_columns(xdf)
@@ -77,22 +89,42 @@ class MeowModel(object):
 
         centered_xtx = self._XtX - self._n_rows * np.outer(mean_x, mean_x)
         centered_xty = self._Xty - mean_x * self._sum_y
-        ztz = centered_xtx * np.outer(inv_scale, inv_scale)
-        zty = centered_xty * inv_scale
-        ridge_diag = self._ridge_diag()
 
-        coef_scaled = np.linalg.solve(
-            ztz + np.diag(ridge_diag),
-            zty,
-        )
-        mean_y = self._sum_y / max(self._n_rows, 1)
-        coef = coef_scaled * inv_scale
+        if self.pca_n_components > 0 and self._n_features > self.pca_n_components:
+            self._fit_pca(centered_xtx, centered_xty, mean_x, inv_scale)
+        else:
+            self._fit_direct(centered_xtx, centered_xty, mean_x, inv_scale)
 
         self._mean_x = mean_x
         self._scale_x = scale_x
-        self._coef = coef
-        self._intercept = float(mean_y - mean_x @ coef)
         log.inf("Done fitting")
+
+    def _fit_direct(self, centered_xtx, centered_xty, mean_x, inv_scale):
+        ztz = centered_xtx * np.outer(inv_scale, inv_scale)
+        zty = centered_xty * inv_scale
+        ridge_diag = self._ridge_diag()
+        coef_scaled = np.linalg.solve(ztz + np.diag(ridge_diag), zty)
+        self._coef = coef_scaled * inv_scale
+        mean_y = self._sum_y / max(self._n_rows, 1)
+        self._intercept = float(mean_y - mean_x @ self._coef)
+
+    def _fit_pca(self, centered_xtx, centered_xty, mean_x, inv_scale):
+        n = self._n_features
+        k = min(self.pca_n_components, n)
+        inv_2d = np.outer(inv_scale, inv_scale)
+        ztz = centered_xtx * inv_2d
+        zty = centered_xty * inv_scale
+        evals, evecs = np.linalg.eigh(ztz)
+        V = evecs[:, -k:]  # top k eigenvectors (largest eigenvalues last)
+        zty_pca = V.T @ zty
+        evals_K = np.diag(V.T @ ztz @ V)
+        denom = evals_K + self.pca_alpha
+        coef_pca = zty_pca / np.maximum(denom, 1e-12)
+        self._pca_V = V
+        self._pca_coef = coef_pca
+        orig_coef = V @ coef_pca * inv_scale
+        mean_y = self._sum_y / max(self._n_rows, 1)
+        self._intercept = float(mean_y - mean_x @ orig_coef)
 
     def _ridge_diag(self):
         ridge_diag = np.full(self._n_features, self.alpha, dtype=np.float64)
@@ -121,9 +153,21 @@ class MeowModel(object):
         self.finalize_fit()
 
     def predict(self, xdf):
+        if self._pca_V is not None:
+            return self._predict_pca(xdf)
+        return self._predict_direct(xdf)
+
+    def _predict_direct(self, xdf):
         xdf = self._select_columns(xdf)
         x = xdf.to_numpy(dtype=np.float64)
         return x @ self._coef + self._intercept
+
+    def _predict_pca(self, xdf):
+        xdf = self._select_columns(xdf)
+        x = xdf.to_numpy(dtype=np.float64)
+        z = (x - self._mean_x) * (1.0 / self._scale_x)
+        z_pca = z @ self._pca_V
+        return z_pca @ self._pca_coef + self._intercept
 
     def _select_columns(self, xdf):
         if not self.exclude_patterns:
