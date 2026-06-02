@@ -138,6 +138,8 @@ class MeowFeatureGenerator(object):
             "day_open_gap",
             "range_pos",
             "trade_count_share",
+            "bid_slope_diff",
+            "ask_slope_diff",
             "ret3_x_flow",
             "ret6_x_flow",
             "trade_imb_rank_cs",
@@ -353,6 +355,8 @@ class MeowFeatureGenerator(object):
         features["ask_curvature"] = df["ask4"] - 0.5 * (df["ask0"] + df["ask9"])
         features["bid_size_slope"] = (df["bsize0_4"] - df["bsize10_19"]) / (df["bsize0_4"] + df["bsize10_19"] + eps)
         features["ask_size_slope"] = (df["asize0_4"] - df["asize10_19"]) / (df["asize0_4"] + df["asize10_19"] + eps)
+        features["bid_slope_diff"] = 0.0
+        features["ask_slope_diff"] = 0.0
         features["day_open_gap"] = (df["midpx"] - df["open"]) / (df["open"] + eps)
         features["range_pos"] = ((df["midpx"] - df["low"]) - (df["high"] - df["midpx"])) / (
             df["high"] - df["low"] + eps
@@ -384,6 +388,10 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "micro_dev_ema6"] = base_sym_day["micro_dev"].transform(
             lambda s: s.ewm(halflife=6, adjust=False).mean()
         )
+        # LOB shape momentum: 1-interval lagged change of winning slope features
+        # Captures microstructure dynamics (book-shape velocity) orthogonal to static level features
+        base_df.loc[:, "bid_slope_diff"] = base_sym_day["bid_slope"].diff(1).fillna(0.0)
+        base_df.loc[:, "ask_slope_diff"] = base_sym_day["ask_slope"].diff(1).fillna(0.0)
         base_df.loc[:, "ret12_resid"] = base_df["ret12"] - base_df.groupby([df["date"], df["interval"]], sort=False)[
             "ret12"
         ].transform("mean")
