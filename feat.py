@@ -500,8 +500,8 @@ class MeowFeatureGenerator(object):
 
         # === Per-symbol z-score features ===
         # Cross-sectional ranks answer "how does this stock compare to others NOW?"
-        # Per-symbol z-scores answer "how does this stock compare to its OWN HISTORY?"
-        # These capture orthogonal within-stock temporal patterns.
+        # Interval-conditioned per-symbol z-scores answer: "how unusual is this stock IN THIS SPECIFIC INTERVAL compared to its own history in that same interval?"
+        # These capture time-of-day-specific within-stock deviation patterns that per-symbol (all-interval) aggregation masks.
         symz_cols = [
             "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
             "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
@@ -510,9 +510,9 @@ class MeowFeatureGenerator(object):
         ]
         symz_available = [c for c in symz_cols if c in base_df.columns]
         if symz_available:
-            sym_grp = base_df[symz_available].groupby(df["symbol"], sort=False)
-            sym_mean = sym_grp.transform("mean")
-            sym_std = sym_grp.transform("std")
+            sym_intv_grp = base_df[symz_available].groupby([df["symbol"], df["interval"]], sort=False)
+            sym_mean = sym_intv_grp.transform("mean")
+            sym_std = sym_intv_grp.transform("std")
             sym_std = sym_std.where(sym_std > 1e-8, 1.0)
             sym_z = (base_df[symz_available] - sym_mean) / sym_std
             sym_z = sym_z.fillna(0.0)
