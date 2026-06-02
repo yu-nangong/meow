@@ -131,6 +131,8 @@ class MeowFeatureGenerator(object):
             "cxl_turn_imb",
             "bid_slope",
             "ask_slope",
+            "bid_slope_ema6",
+            "ask_slope_ema6",
             "bid_curvature",
             "ask_curvature",
             "bid_size_slope",
@@ -382,6 +384,12 @@ class MeowFeatureGenerator(object):
             lambda s: s.ewm(halflife=6, adjust=False).mean()
         )
         base_df.loc[:, "micro_dev_ema6"] = base_sym_day["micro_dev"].transform(
+            lambda s: s.ewm(halflife=6, adjust=False).mean()
+        )
+        base_df.loc[:, "bid_slope_ema6"] = base_sym_day["bid_slope"].transform(
+            lambda s: s.ewm(halflife=6, adjust=False).mean()
+        )
+        base_df.loc[:, "ask_slope_ema6"] = base_sym_day["ask_slope"].transform(
             lambda s: s.ewm(halflife=6, adjust=False).mean()
         )
         base_df.loc[:, "ret12_resid"] = base_df["ret12"] - base_df.groupby([df["date"], df["interval"]], sort=False)[
