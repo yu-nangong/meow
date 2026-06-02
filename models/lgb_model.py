@@ -1,4 +1,4 @@
-"""LightGBM base model with reservoir-sampled chunked training."""
+"""LightGBM base model with reservoir-sampled chunked training and early stopping."""
 from __future__ import annotations
 
 import os
@@ -12,12 +12,15 @@ class LGBModel:
         self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
+        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "2000"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
+        # Early stopping: split reservoir internally, stop when val loss plateaus.
+        self.val_fraction = float(os.environ.get("MEOW_LGB_VAL_FRACTION", "0.15"))
+        self.early_stopping_rounds = int(os.environ.get("MEOW_LGB_EARLY_STOPPING", "30"))
         # Give LGB all features by default; tree splits capture nonlinear
         # signal in time-interacted/cs features that Ridge linear coeffs miss.
         self.exclude_families = {
@@ -83,28 +86,54 @@ class LGBModel:
             self._n_accumulated += n
 
     def finalize_fit(self):
-        if self._X_reservoir is None or len(self._y_reservoir) < 1000:
+        if self._X_reservoir is None or len(self._y_reservoir) < 2000:
             return
+        import warnings
+        # Split reservoir into train/val. Shuffle to avoid temporal bias.
+        n_total = self._X_reservoir.shape[0]
+        n_val = max(500, int(n_total * self.val_fraction))
+        perm = self._rng.permutation(n_total)
+        val_idx = perm[:n_val]
+        train_idx = perm[n_val:]
+
+        train_data = lgb.Dataset(
+            self._X_reservoir[train_idx], label=self._y_reservoir[train_idx],
+            free_raw_data=False,
+        )
+        val_data = lgb.Dataset(
+            self._X_reservoir[val_idx], label=self._y_reservoir[val_idx],
+            reference=train_data, free_raw_data=False,
+        )
+
+        boosting_type = "rf" if self.extra_trees else "gbdt"
         params = dict(
-            boosting_type="rf" if self.extra_trees else "gbdt",
+            boosting_type=boosting_type,
             num_leaves=self.num_leaves,
             learning_rate=self.learning_rate,
-            n_estimators=self.n_estimators,
             subsample=self.subsample,
             subsample_freq=1,
             colsample_bytree=self.colsample_bytree,
             min_child_samples=self.min_child_samples,
             reg_lambda=self.reg_lambda,
+            objective="regression",
+            metric="l2",
             verbose=-1,
-            random_state=42,
+            seed=42,
             n_jobs=1,  # single-thread to avoid grader memory pressure
         )
-        train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
-        self._model = lgb.train(
-            params,
-            train_data,
-            num_boost_round=self.n_estimators,
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self._model = lgb.train(
+                params,
+                train_data,
+                num_boost_round=self.n_estimators,
+                valid_sets=[val_data],
+                valid_names=["val"],
+                callbacks=[
+                    lgb.early_stopping(self.early_stopping_rounds, verbose=False),
+                    lgb.log_evaluation(period=0),
+                ],
+            )
 
     def predict(self, xdf):
         if self._model is None or self._feature_names is None:
