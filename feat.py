@@ -242,6 +242,11 @@ class MeowFeatureGenerator(object):
             "market_ret12_resid_std",
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
+            "ret1_rank_cs_x_mkt_ret1_std",
+            "trade_imb_rank_cs_x_mkt_trade_imb_std",
+            "high_minus_low_rank_cs_x_mkt_high_minus_low_std",
+            "micro_dev_rank_cs_x_mkt_micro_dev_std",
+            "ret12_resid_rank_cs_x_mkt_ret12_std",
 
             "interval_frac_centered",
             "interval_u",
@@ -539,6 +544,22 @@ class MeowFeatureGenerator(object):
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
 
+        # Market dispersion x stock signal interactions: regime-conditional features.
+        # Capture whether a signal's predictive power varies with cross-sectional dispersion.
+        _mkt_int_pairs = [
+            ("ret1_rank_cs", "market_ret1_std"),
+            ("trade_imb_rank_cs", "market_trade_imb_std"),
+            ("high_minus_low_rank_cs", "market_high_minus_low_std"),
+            ("micro_dev_rank_cs", "market_micro_dev_std"),
+            ("ret12_resid_rank_cs", "market_ret12_std"),
+        ]
+        mkt_int_df = pd.DataFrame(index=df.index)
+        for rcol, mcol in _mkt_int_pairs:
+            mkt_int_df[f"{rcol}_x_{mcol}"] = (
+                rank_df[rcol].to_numpy(dtype=np.float32, copy=False)
+                * base_df[mcol].to_numpy(dtype=np.float32, copy=False)
+            )
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -633,6 +654,7 @@ class MeowFeatureGenerator(object):
                 time_interactions_df,
                 u_interactions_df,
                 time_sq_interactions_df,
+                mkt_int_df,
                 u_sq_interactions_df,
             ],
             axis=1,
