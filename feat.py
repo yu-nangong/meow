@@ -247,6 +247,16 @@ class MeowFeatureGenerator(object):
             "high_minus_low_x_ret1_rank_cs",
             "micro_dev_x_trade_imb_rank_cs",
             "spread_x_depth_pressure_04_rank_cs",
+            "ob_imb0_x_ob_imb19_rank_cs",
+            "depth_pressure_04_x_depth_pressure_1019_rank_cs",
+            "turnover_imb_x_trade_imb_rank_cs",
+            "high_gap_x_low_gap_rank_cs",
+            "buy_vwad_dev_x_sell_vwad_dev_rank_cs",
+            "ret1_x_ret6_rank_cs",
+            "ob_imb_front_back_x_ob_imb_inner_outer_rank_cs",
+            "trade_count_share_x_trade_imb_rank_cs",
+            "depth_pressure_04_x_ob_imb0_rank_cs",
+            "spread_x_high_minus_low_rank_cs",
 
             "interval_frac_centered",
             "interval_u",
@@ -552,6 +562,16 @@ class MeowFeatureGenerator(object):
             ("high_minus_low_rank_cs", "ret1_rank_cs"),
             ("micro_dev_rank_cs", "trade_imb_rank_cs"),
             ("spread_rank_cs", "depth_pressure_04_rank_cs"),
+            ("ob_imb0_rank_cs", "ob_imb19_rank_cs"),
+            ("depth_pressure_04_rank_cs", "depth_pressure_1019_rank_cs"),
+            ("turnover_imb_rank_cs", "trade_imb_rank_cs"),
+            ("high_gap_rank_cs", "low_gap_rank_cs"),
+            ("buy_vwad_dev_rank_cs", "sell_vwad_dev_rank_cs"),
+            ("ret1_rank_cs", "ret6_rank_cs"),
+            ("ob_imb_front_back_rank_cs", "ob_imb_inner_outer_rank_cs"),
+            ("trade_count_share_rank_cs", "trade_imb_rank_cs"),
+            ("depth_pressure_04_rank_cs", "ob_imb0_rank_cs"),
+            ("spread_rank_cs", "high_minus_low_rank_cs"),
         ]
         pair_int_df = pd.DataFrame(index=df.index)
         for a, b in _pair_pairs:
