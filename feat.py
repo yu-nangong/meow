@@ -265,6 +265,7 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
         ]
+        feature_names.append("symbol_target")
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
@@ -275,6 +276,7 @@ class MeowFeatureGenerator(object):
         self.ycol = "fret12"
         self.mcols = ["symbol", "date", "interval"]
         self._raw_level_pairs = self._get_raw_level_pairs()
+        self._symbol_encoding = {}
 
     def genFeatures(self, df):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
@@ -590,6 +592,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                pd.DataFrame({"symbol_target": self._symbol_target(df)}, index=df.index),
             ],
             axis=1,
         ).astype(np.float32)
@@ -602,3 +605,19 @@ class MeowFeatureGenerator(object):
         )
         ydf = df[self.mcols + [self.ycol]].set_index(self.mcols)
         return xdf, ydf.fillna(0.0)
+
+    def set_encodings(self, symbol_encoding):
+        """Set trained target encodings to apply during feature generation.
+
+        Args:
+            symbol_encoding: dict mapping symbol -> mean fret12 from training data.
+                Encoding=0.0 for symbols not seen during training.
+        """
+        self._symbol_encoding = {} if symbol_encoding is None else dict(symbol_encoding)
+        log.inf(f"Set target encodings from training ({len(self._symbol_encoding)} symbols)")
+
+    def _symbol_target(self, df):
+        """Compute symbol_target column from stored encodings."""
+        if self._symbol_encoding:
+            return pd.Series(df["symbol"].map(self._symbol_encoding).values, index=df.index, dtype=np.float32).fillna(0.0)
+        return pd.Series(0.0, index=df.index, dtype=np.float32)

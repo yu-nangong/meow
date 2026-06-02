@@ -159,6 +159,24 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     model = _create_base_model()
     model.reset()
 
+    # Compute per-symbol target encoding from training data
+    symbol_sums = {}
+    symbol_counts = {}
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        for sym, grp in raw.groupby("symbol", sort=False):
+            s = symbol_sums.get(sym, 0.0)
+            c = symbol_counts.get(sym, 0)
+            fret_vals = grp["fret12"].dropna().to_numpy(dtype=np.float64)
+            symbol_sums[sym] = s + float(fret_vals.sum())
+            symbol_counts[sym] = c + len(fret_vals)
+        del raw
+    symbol_encoding = {
+        sym: symbol_sums[sym] / max(symbol_counts[sym], 1)
+        for sym in symbol_sums
+    }
+    feat_gen.set_encodings(symbol_encoding)
+
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
