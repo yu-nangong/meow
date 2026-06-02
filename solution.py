@@ -20,6 +20,7 @@ from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
 
+from models.pearson_nn import PearsonNNModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
@@ -147,6 +148,8 @@ def _create_base_model():
         return BlendModel()
     if MODEL_TYPE == "lgb":
         return LGBModel()
+    if MODEL_TYPE == "pearson_nn":
+        return PearsonNNModel()
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
     return MeowModel(cacheDir=None)
