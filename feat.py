@@ -317,6 +317,14 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
+        # symz × rank_cs pairwise interactions (hybrid temporal × cross-sectional)
+        _symz_rankcs_pair_base = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+        ]
+        feature_names.extend(f"{col}_symz_x_{col}_rank_cs" for col in _symz_rankcs_pair_base)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
@@ -610,6 +618,30 @@ class MeowFeatureGenerator(object):
                 rank_df[a].to_numpy(dtype=np.float32, copy=False)
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
+        # symz × rank_cs pairwise interactions: hybrid temporal × cross-sectional.
+        # symz captures within-stock deviation; rank_cs captures cross-sectional position.
+        # Their product captures stocks that are both unusual-in-own-history AND extreme-vs-peers.
+        _symz_rankcs_pairs = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+        ]
+        try:
+            _symz_colnames = sym_z.columns
+        except NameError:
+            _symz_colnames = ()
+        _symz_rankcs_available = [
+            c for c in _symz_rankcs_pairs
+            if f"{c}_symz" in _symz_colnames and f"{c}_rank_cs" in rank_df.columns
+        ]
+        for col in _symz_rankcs_available:
+            # Clip symz to [-3, 3] then multiply by rank_cs in [-0.5, 0.5] -> product in [-1.5, 1.5]
+            symz_clipped = sym_z[f"{col}_symz"].to_numpy(dtype=np.float32, copy=False).clip(-3.0, 3.0)
+            pair_int_df[f"{col}_symz_x_{col}_rank_cs"] = (
+                symz_clipped * rank_df[f"{col}_rank_cs"].to_numpy(dtype=np.float32, copy=False)
+            )
+
 
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
