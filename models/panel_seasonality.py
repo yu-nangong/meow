@@ -16,6 +16,8 @@ class PanelSeasonalityResidual:
         self.symbol_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_SYMBOL_ALPHA", "20.0"))
         self.interval_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_INTERVAL_ALPHA", "20.0"))
         self.pair_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_PAIR_ALPHA", "40.0"))
+        self.reliability_alpha = float(os.environ.get("MEOW_PANEL_SEASONALITY_RELIABILITY_ALPHA", "40.0"))
+        self.default_reliability = float(os.environ.get("MEOW_PANEL_SEASONALITY_DEFAULT_RELIABILITY", "0.3"))
         self._global_sum = 0.0
         self._global_count = 0
         self._symbol_sum = {}
@@ -28,6 +30,7 @@ class PanelSeasonalityResidual:
         self._symbol_mean = {}
         self._interval_mean = {}
         self._pair_mean = {}
+        self._pair_reliability = {}
 
     def partial_fit(self, ydf: pd.DataFrame, resid: np.ndarray) -> None:
         if not self.enabled or not self.blend or len(ydf) == 0:
@@ -79,6 +82,11 @@ class PanelSeasonalityResidual:
             )
             pair_count = self._pair_count[key]
             self._pair_mean[key] = (pair_sum + self.pair_alpha * base_prior) / (pair_count + self.pair_alpha)
+        # Per-pair reliability: well-observed pairs get near-full blend; sparse ones get attenuated.
+        self._pair_reliability = {
+            key: count / (count + self.reliability_alpha)
+            for key, count in self._pair_count.items()
+        }
 
     def predict(self, ydf: pd.DataFrame) -> np.ndarray:
         if not self.enabled or not self.blend or len(ydf) == 0:
@@ -88,10 +96,11 @@ class PanelSeasonalityResidual:
         for idx, row in enumerate(keys.itertuples(index=False)):
             symbol = row.symbol
             interval = int(row.interval)
+            pair_key = (symbol, interval)
             base_prior = (
                 self._symbol_mean.get(symbol, self._global_mean)
                 + self._interval_mean.get(interval, self._global_mean)
                 - self._global_mean
             )
-            pred[idx] = self._pair_mean.get((symbol, interval), base_prior)
+            pred[idx] = self._pair_mean.get(pair_key, base_prior) * self._pair_reliability.get(pair_key, self.default_reliability)
         return self.blend * pred
