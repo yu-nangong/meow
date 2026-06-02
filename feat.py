@@ -258,6 +258,25 @@ class MeowFeatureGenerator(object):
             "depth_pressure_04_x_ob_imb0_rank_cs",
             "spread_x_high_minus_low_rank_cs",
 
+            "mkt_trade_imb_x_trade_imb_rank_cs",
+            "mkt_ret1_x_ret1_rank_cs",
+            "mkt_micro_dev_x_micro_dev_rank_cs",
+            "mkt_ob_imb0_x_ob_imb0_rank_cs",
+            "mkt_spread_x_spread_rank_cs",
+            "mkt_flow_imb_x_flow_imb_rank_cs",
+            "mkt_high_minus_low_x_high_minus_low_rank_cs",
+            "mkt_depth_pressure_04_x_depth_pressure_04_rank_cs",
+            "mkt_ret12_resid_x_ret12_resid_rank_cs",
+            "mkt_trade_count_share_x_trade_count_share_rank_cs",
+            "mkt_ret6_x_ret6_rank_cs",
+            "mkt_trade_imb_x_flow_imb_rank_cs",
+            "mkt_ret1_x_trade_imb_rank_cs",
+            "mkt_high_minus_low_x_ret1_rank_cs",
+            "mkt_trade_imb_std_x_trade_imb_rank_cs",
+            "mkt_ret1_std_x_ret1_rank_cs",
+            "mkt_spread_std_x_spread_rank_cs",
+            "mkt_high_minus_low_std_x_high_minus_low_rank_cs",
+            "mkt_ret6_std_x_ret6_rank_cs",
             "interval_frac_centered",
             "interval_u",
             "interval_frac_sq",
@@ -490,6 +509,16 @@ class MeowFeatureGenerator(object):
         market_stds.columns = [f"market_{col}_std" for col in market_std_cols]
         base_df = pd.concat([base_df, market_means, market_stds], axis=1)
 
+        # Rank-normalize market features for bounded cross-scale interactions.
+        # Both operands in [-0.5, 0.5] so pairwise products stay in [-0.25, 0.25].
+        market_means_ranked = market_means.rank(pct=True) - 0.5
+        market_means_ranked.columns = [f"{col}_rank_cs" for col in market_means.columns]
+        market_stds_ranked = market_stds.rank(pct=True) - 0.5
+        market_stds_ranked.columns = [f"{col}_rank_cs" for col in market_stds.columns]
+        base_df = pd.concat(
+            [base_df, market_means_ranked, market_stds_ranked], axis=1
+        )
+
         cs_cols = [
             "trade_imb",
             "micro_dev",
@@ -554,6 +583,8 @@ class MeowFeatureGenerator(object):
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
 
+        rank_df = pd.concat([rank_df, market_means_ranked, market_stds_ranked], axis=1)
+
         # Pairwise rank_cs interactions: bounded nonlinear combinations.
         # Both sides are [-0.5, 0.5] so the product is [-0.25, 0.25], well-behaved.
         _pair_pairs = [
@@ -582,6 +613,37 @@ class MeowFeatureGenerator(object):
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
 
+
+        # Market x individual rank_cs interactions: cross-scale bounded combinations.
+        _mkt_pair_pairs = [
+            ("market_trade_imb_rank_cs", "trade_imb_rank_cs"),
+            ("market_ret1_rank_cs", "ret1_rank_cs"),
+            ("market_micro_dev_rank_cs", "micro_dev_rank_cs"),
+            ("market_ob_imb0_rank_cs", "ob_imb0_rank_cs"),
+            ("market_spread_rank_cs", "spread_rank_cs"),
+            ("market_flow_imb_rank_cs", "flow_imb_rank_cs"),
+            ("market_high_minus_low_rank_cs", "high_minus_low_rank_cs"),
+            ("market_depth_pressure_04_rank_cs", "depth_pressure_04_rank_cs"),
+            ("market_ret12_resid_rank_cs", "ret12_resid_rank_cs"),
+            ("market_trade_count_share_rank_cs", "trade_count_share_rank_cs"),
+            ("market_ret6_rank_cs", "ret6_rank_cs"),
+            ("market_trade_imb_rank_cs", "flow_imb_rank_cs"),
+            ("market_ret1_rank_cs", "trade_imb_rank_cs"),
+            ("market_high_minus_low_rank_cs", "ret1_rank_cs"),
+            ("market_trade_imb_std_rank_cs", "trade_imb_rank_cs"),
+            ("market_ret1_std_rank_cs", "ret1_rank_cs"),
+            ("market_spread_std_rank_cs", "spread_rank_cs"),
+            ("market_high_minus_low_std_rank_cs", "high_minus_low_rank_cs"),
+            ("market_ret6_std_rank_cs", "ret6_rank_cs"),
+        ]
+        mkt_pair_int_df = pd.DataFrame(index=df.index)
+        for a, b in _mkt_pair_pairs:
+            short_a = a[len("market_"):].replace("_rank_cs", "")
+            short_b = b.replace("_rank_cs", "")
+            mkt_pair_int_df[f"mkt_{short_a}_x_{short_b}_rank_cs"] = (
+                rank_df[a].to_numpy(dtype=np.float32, copy=False)
+                * rank_df[b].to_numpy(dtype=np.float32, copy=False)
+            )
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -673,6 +735,7 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                mkt_pair_int_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
