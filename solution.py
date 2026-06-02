@@ -18,6 +18,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.raw_lob_nn import RawLobResidualModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -192,15 +193,30 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
 
+    raw_lob_nn = RawLobResidualModel()
+    raw_lob_nn.reset()
+    # Second pass: train raw LOB NN on final residuals from full pipeline
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        y_true = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        forecast = forecast + panel_residual.predict(ydf)
+        raw_lob_nn.partial_fit(raw, forecast, y_true)
+        del raw, xdf, ydf, forecast, y_true
+    raw_lob_nn.finalize_fit()
+
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
-        del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
+        forecast = forecast + raw_lob_nn.predict(raw)
+        del raw
         ydf.loc[:, "forecast"] = forecast
         del xdf
         y_parts.append(ydf["fret12"].to_numpy())
