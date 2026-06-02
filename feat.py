@@ -39,6 +39,10 @@ class MeowFeatureGenerator(object):
             ("tradeSellTurnover_level", "rank", "tradeSellTurnover"),
             ("buyVwad_level", "rank", "buyVwad"),
             ("sellVwad_level", "rank", "sellVwad"),
+            ("addBuyHigh_level", "rank", "addBuyHigh"),
+            ("addBuyLow_level", "rank", "addBuyLow"),
+            ("addSellHigh_level", "rank", "addSellHigh"),
+            ("addSellLow_level", "rank", "addSellLow"),
             ("bsize0_level", "rank", "bsize0"),
             ("asize0_level", "rank", "asize0"),
             ("addBuyQty_level", "rank", "addBuyQty"),
@@ -127,6 +131,10 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap",
             "trade_high_skew",
             "high_vs_trade_high_gap",
+            "add_buy_high_dev",
+            "add_sell_low_dev",
+            "add_buy_price_range",
+            "add_sell_price_range",
             "add_turn_imb",
             "cxl_turn_imb",
             "day_open_gap",
@@ -175,6 +183,10 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
             "high_vs_trade_high_gap_rank_cs",
+            "add_buy_high_dev_rank_cs",
+            "add_sell_low_dev_rank_cs",
+            "add_buy_price_range_rank_cs",
+            "add_sell_price_range_rank_cs",
             "midpx_level_rank_cs",
             "lastpx_level_rank_cs",
             "high_level_rank_cs",
@@ -186,6 +198,10 @@ class MeowFeatureGenerator(object):
             "tradeSellTurnover_level_rank_cs",
             "buyVwad_level_rank_cs",
             "sellVwad_level_rank_cs",
+            "addBuyHigh_level_rank_cs",
+            "addBuyLow_level_rank_cs",
+            "addSellHigh_level_rank_cs",
+            "addSellLow_level_rank_cs",
             "bsize0_level_rank_cs",
             "asize0_level_rank_cs",
             "addBuyQty_level_rank_cs",
@@ -330,6 +346,12 @@ class MeowFeatureGenerator(object):
         features["buy_vwad_dev"] = (df["buyVwad"] - df["midpx"]) / (df["midpx"] + eps)
         features["sell_vwad_dev"] = (df["sellVwad"] - df["midpx"]) / (df["midpx"] + eps)
         features["trade_vwad_gap"] = (df["buyVwad"] - df["sellVwad"]) / (df["midpx"] + eps)
+        features["add_buy_high_dev"] = (df["addBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_buy_low_dev"] = (df["addBuyLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_high_dev"] = (df["addSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_low_dev"] = (df["addSellLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_buy_price_range"] = (df["addBuyHigh"] - df["addBuyLow"]) / (df["midpx"] + eps)
+        features["add_sell_price_range"] = (df["addSellHigh"] - df["addSellLow"]) / (df["midpx"] + eps)
         features["high_gap"] = (df["high"] - df["midpx"]) / (df["midpx"] + eps)
         features["low_gap"] = (df["midpx"] - df["low"]) / (df["midpx"] + eps)
         features["high_minus_low"] = (df["high"] - df["low"]) / (df["midpx"] + eps)
@@ -479,6 +501,10 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap",
             "trade_high_skew",
             "high_vs_trade_high_gap",
+            "add_buy_high_dev",
+            "add_sell_low_dev",
+            "add_buy_price_range",
+            "add_sell_price_range",
         ]
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
