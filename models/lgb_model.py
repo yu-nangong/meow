@@ -10,9 +10,9 @@ import lightgbm as lgb
 class LGBModel:
     def __init__(self):
         self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
-        self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
-        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
+        self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "63"))
+        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.03"))
+        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "400"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
@@ -24,7 +24,7 @@ class LGBModel:
             f.strip()
             for f in os.environ.get(
                 "MEOW_LGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+                "",
             ).split(",")
             if f.strip()
         }
