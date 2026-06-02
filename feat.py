@@ -179,6 +179,10 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
             "high_vs_trade_high_gap_rank_cs",
+            "bid_slope_rank_cs",
+            "ask_slope_rank_cs",
+            "bid_curvature_rank_cs",
+            "ask_curvature_rank_cs",
             "midpx_level_rank_cs",
             "lastpx_level_rank_cs",
             "high_level_rank_cs",
@@ -487,6 +491,10 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap",
             "trade_high_skew",
             "high_vs_trade_high_gap",
+            "bid_slope",
+            "ask_slope",
+            "bid_curvature",
+            "ask_curvature",
         ]
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
