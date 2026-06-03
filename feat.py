@@ -265,7 +265,21 @@ class MeowFeatureGenerator(object):
             "interval_u_sq",
             "time_sin_2pi",
             "time_cos_2pi",
-            "time_sin_4pi",
+            # Per-symbol rolling momentum features (within-chunk, no look-ahead)
+            "trade_imb_psym_roll10",
+            "trade_imb_psym_roll30",
+            "micro_dev_psym_roll10",
+            "micro_dev_psym_roll30",
+            "ret1_psym_roll10",
+            "ret1_psym_roll30",
+            "ret6_psym_roll10",
+            "ret6_psym_roll30",
+            "spread_psym_roll10",
+            "spread_psym_roll30",
+            "ob_imb0_psym_roll10",
+            "ob_imb0_psym_roll30",
+            "depth_pressure_04_psym_roll10",
+            "depth_pressure_04_psym_roll30",
             "trade_imb_rank_cs_x_time",
             "flow_imb_rank_cs_x_time",
             "ret1_rank_cs_x_time",
@@ -666,6 +680,26 @@ class MeowFeatureGenerator(object):
         else:
             time_sq_interactions_df = pd.DataFrame(index=df.index)
             u_sq_interactions_df = pd.DataFrame(index=df.index)
+        # Per-symbol rolling momentum features: within-stock temporal deviation
+        # without look-ahead. Group by (symbol, date), shift(1) to exclude current
+        # row, then rolling mean over window. Zero leakage.
+        _psym_metrics = [
+            "trade_imb", "micro_dev", "ret1", "ret6", "spread",
+            "ob_imb0", "depth_pressure_04",
+        ]
+        _psym_windows = [10, 30]
+        _psym_df = pd.DataFrame(index=df.index, dtype=np.float32)
+        for _metric in _psym_metrics:
+            if _metric not in base_df.columns:
+                continue
+            _series = base_df[_metric]
+            for _w in _psym_windows:
+                _rolled = _series.groupby(
+                    [df["symbol"], df["date"]], sort=False
+                ).transform(
+                    lambda x: x.shift(1).rolling(window=_w, min_periods=max(3, _w // 2)).mean(),
+                )
+                _psym_df[f"{_metric}_psym_roll{_w}"] = _rolled.astype(np.float32)
 
         feat_df = pd.concat(
             [
@@ -678,6 +712,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                _psym_df,
             ],
             axis=1,
         ).astype(np.float32)
