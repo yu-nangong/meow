@@ -161,7 +161,6 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
-    feat_gen.fit_symz_stats(h5dir, train_dates)
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
