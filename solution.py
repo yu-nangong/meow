@@ -19,10 +19,22 @@ from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
-from models.deeplob_model import DeepLOBModel
-from models.nn_residual import NnResidualModel
+DeepLOBModel = None
+try:
+    from models.deeplob_model import DeepLOBModel
+except ImportError:
+    pass
+NnResidualModel = None
+try:
+    from models.nn_residual import NnResidualModel
+except ImportError:
+    pass
 
-from models.pearson_nn import PearsonNNModel
+PearsonNNModel = None
+try:
+    from models.pearson_nn import PearsonNNModel
+except ImportError:
+    pass
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
@@ -153,7 +165,7 @@ def _create_base_model():
         return BlendModel()
     if MODEL_TYPE == "lgb":
         return LGBModel()
-    if MODEL_TYPE == "pearson_nn":
+    if MODEL_TYPE == "pearson_nn" and PearsonNNModel is not None:
         return PearsonNNModel()
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
@@ -203,7 +215,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
     nn_residual = None
-    if NN_RESIDUAL_ENABLED:
+    if NN_RESIDUAL_ENABLED and NnResidualModel is not None:
         nn_residual = NnResidualModel()
         nn_residual.reset()
         for chunk in _chunk_dates(train_dates, N_CHUNKS):
@@ -220,7 +232,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
 
     seq_model = None
     if SEQ_MODEL_ENABLED:
-        if SEQ_MODEL_TYPE == "deeplob":
+        if SEQ_MODEL_TYPE == "deeplob" and DeepLOBModel is not None:
             seq_model = DeepLOBModel()
         else:
             seq_model = LagMLPSequenceModel()

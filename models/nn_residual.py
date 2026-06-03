@@ -27,7 +27,7 @@ class ResidualNet(nn.Module):
         self.fc3 = nn.Linear(hidden // 2, hidden // 4)
         self.bn3 = nn.BatchNorm1d(hidden // 4)
         self.head = nn.Linear(hidden // 4, 1)
-        self.dropout = nn.Dropout(0.15)
+        self.dropout = nn.Dropout(0.05)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_bn(x)
