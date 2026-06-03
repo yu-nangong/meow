@@ -6,8 +6,14 @@ import os
 import numpy as np
 
 from models.lgb_model import LGBModel
-from models.xgb_model import XGBModel
 from mdl import MeowModel
+
+_XGB_AVAILABLE = False
+try:
+    from models.xgb_model import XGBModel
+    _XGB_AVAILABLE = True
+except ImportError:
+    pass
 
 _TREE_TYPE = os.environ.get("MEOW_TREE_TYPE", "lgb").strip().lower()
 
@@ -19,7 +25,7 @@ class BlendModel:
     """
 
     def __init__(self):
-        if _TREE_TYPE == "xgb":
+        if _TREE_TYPE == "xgb" and _XGB_AVAILABLE:
             self._tree = XGBModel()
         else:
             self._tree = LGBModel()
