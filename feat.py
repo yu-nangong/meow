@@ -214,6 +214,14 @@ class MeowFeatureGenerator(object):
             "tradeSellQty_zs",
             "bsize0_zs",
             "asize0_zs",
+            "midpx_symz",
+            "lastpx_symz",
+            "buyVwad_symz",
+            "sellVwad_symz",
+            "tradeBuyQty_symz",
+            "tradeSellQty_symz",
+            "bsize0_symz",
+            "asize0_symz",
             "market_ret1",
             "market_ret3",
             "market_ret6",
@@ -313,11 +321,57 @@ class MeowFeatureGenerator(object):
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
 
+    # Per-symbol z-score columns (leakage-free: pre-computed from training data only)
+    _SYMZ_H5_COLS = [
+        "midpx", "lastpx", "buyVwad", "sellVwad",
+        "tradeBuyQty", "tradeSellQty", "bsize0", "asize0",
+    ]
+
     def __init__(self, cacheDir):
         self.cacheDir = cacheDir
         self.ycol = "fret12"
         self.mcols = ["symbol", "date", "interval"]
         self._raw_level_pairs = self._get_raw_level_pairs()
+        self._symz_means = None  # dict: symbol -> np.array of means per column
+        self._symz_stds = None   # dict: symbol -> np.array of stds per column
+        self._symz_symbols = None
+
+
+    def precompute_symz_stats(self, h5dir, train_dates):
+        # Pre-compute per-symbol means/stds from training data only (no look-ahead).
+        from data_io import iter_days
+        symz_cols = self._SYMZ_H5_COLS
+        sym_sum = {}
+        sym_sum2 = {}
+        sym_count = {}
+
+        for train_date in train_dates:
+            for raw in iter_days(h5dir, [train_date]):
+                for sym, grp in raw.groupby("symbol", sort=False):
+                    if sym not in sym_sum:
+                        sym_sum[sym] = np.zeros(len(symz_cols), dtype=np.float64)
+                        sym_sum2[sym] = np.zeros(len(symz_cols), dtype=np.float64)
+                        sym_count[sym] = np.zeros(len(symz_cols), dtype=np.int64)
+                    valid = grp[symz_cols].to_numpy(dtype=np.float64)
+                    valid = np.where(np.isfinite(valid) & (valid > 0), valid, np.nan)
+                    n_valid = np.sum(np.isfinite(valid), axis=0)
+                    col_sum = np.nansum(valid, axis=0)
+                    col_sum2 = np.nansum(np.square(valid), axis=0)
+                    sym_sum[sym] += col_sum
+                    sym_sum2[sym] += col_sum2
+                    sym_count[sym] += n_valid
+
+        self._symz_means = {}
+        self._symz_stds = {}
+        for sym in sym_sum:
+            n = np.maximum(sym_count[sym], 2)
+            mean = sym_sum[sym] / n
+            var = sym_sum2[sym] / n - np.square(mean)
+            std = np.sqrt(np.maximum(var, 1e-12))
+            self._symz_means[sym] = mean
+            self._symz_stds[sym] = std
+        self._symz_symbols = sorted(self._symz_means.keys())
+        log.inf(f"Pre-computed per-symbol z-score stats for {len(self._symz_symbols)} symbols")
 
     def genFeatures(self, df):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
@@ -667,6 +721,35 @@ class MeowFeatureGenerator(object):
             time_sq_interactions_df = pd.DataFrame(index=df.index)
             u_sq_interactions_df = pd.DataFrame(index=df.index)
 
+        # Per-symbol z-scores: temporal normalization, orthogonal to cross-sectional ranks/zs.
+        # Pre-computed from training data only (no look-ahead leakage).
+        if self._symz_means is not None:
+            symz_cols = self._SYMZ_H5_COLS
+            symz_arr = np.zeros((len(df), len(symz_cols)), dtype=np.float32)
+            sym_array = df["symbol"].to_numpy()
+            for ci, col in enumerate(symz_cols):
+                if col not in df.columns:
+                    continue
+                raw_col = df[col].to_numpy(dtype=np.float64)
+                col_out = np.full(len(df), 0.0, dtype=np.float32)
+                for sym, mean_arr in self._symz_means.items():
+                    mask = sym_array == sym
+                    if not mask.any():
+                        continue
+                    m = float(mean_arr[ci])
+                    s = float(self._symz_stds[sym][ci])
+                    z = (raw_col[mask] - m) / s
+                    z = np.clip(z, -4.0, 4.0)
+                    col_out[mask] = z.astype(np.float32)
+                symz_arr[:, ci] = col_out
+            symz_df = pd.DataFrame(
+                symz_arr,
+                index=df.index,
+                columns=[f"{c}_symz" for c in symz_cols],
+            )
+        else:
+            symz_df = pd.DataFrame(index=df.index)
+
         feat_df = pd.concat(
             [
                 base_df,
@@ -678,6 +761,7 @@ class MeowFeatureGenerator(object):
                 u_interactions_df,
                 time_sq_interactions_df,
                 u_sq_interactions_df,
+                symz_df,
             ],
             axis=1,
         ).astype(np.float32)

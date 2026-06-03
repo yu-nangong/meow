@@ -176,6 +176,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
+    feat_gen.precompute_symz_stats(h5dir, train_dates)
     model = _create_base_model()
     model.reset()
 
