@@ -44,9 +44,9 @@ class NnResidualModel:
 
     def __init__(self):
         self.lr = float(os.environ.get("MEOW_NNR_LR", "3e-4"))
-        self.epochs = int(os.environ.get("MEOW_NNR_EPOCHS", "15"))
+        self.epochs = int(os.environ.get("MEOW_NNR_EPOCHS", "25"))
         self.batch_size = int(os.environ.get("MEOW_NNR_BATCH_SIZE", "1024"))
-        self.hidden = int(os.environ.get("MEOW_NNR_HIDDEN", "64"))
+        self.hidden = int(os.environ.get("MEOW_NNR_HIDDEN", "128"))
         self.weight_decay = float(os.environ.get("MEOW_NNR_WD", "1e-6"))
         self.max_rows = int(os.environ.get("MEOW_NNR_MAX_ROWS", "200000"))
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
