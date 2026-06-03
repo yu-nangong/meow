@@ -265,7 +265,6 @@ class MeowFeatureGenerator(object):
             "interval_u_sq",
             "time_sin_2pi",
             "time_cos_2pi",
-            "time_sin_4pi",
             "trade_imb_rank_cs_x_time",
             "flow_imb_rank_cs_x_time",
             "ret1_rank_cs_x_time",
@@ -308,9 +307,6 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
         ]
-        nonlinear_time_interactions = cls._nonlinear_time_interactions()
-        feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
-        feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
 
     def __init__(self, cacheDir):
@@ -656,17 +652,9 @@ class MeowFeatureGenerator(object):
         u_interactions_df.columns = [f"{col}_x_u" for col in u_interactions]
 
         # Keep second-order gates narrow; the broader version was killed by grader resource limits.
-        nonlinear_time_interactions = self._nonlinear_time_interactions()
-        if nonlinear_time_interactions:
-            time_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_frac_sq"], axis=0)
-            time_sq_interactions_df.columns = [f"{col}_x_time_sq" for col in nonlinear_time_interactions]
 
-            u_sq_interactions_df = rank_df[nonlinear_time_interactions].mul(time_df["interval_u_sq"], axis=0)
-            u_sq_interactions_df.columns = [f"{col}_x_u_sq" for col in nonlinear_time_interactions]
-        else:
-            time_sq_interactions_df = pd.DataFrame(index=df.index)
-            u_sq_interactions_df = pd.DataFrame(index=df.index)
-
+        time_sq_interactions_df = pd.DataFrame(index=df.index)
+        u_sq_interactions_df = pd.DataFrame(index=df.index)
         feat_df = pd.concat(
             [
                 base_df,
