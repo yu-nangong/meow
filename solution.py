@@ -173,6 +173,64 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         del xdf, ydf, y_train
     model.finalize_fit()
 
+    # Per-symbol bias calibration + learned blend (BlendModel only)
+    if isinstance(model, BlendModel):
+        from collections import defaultdict
+        # Compute per-symbol biases on full training set
+        sym_sum_err = defaultdict(float)
+        sym_count = defaultdict(int)
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            lgb_p, ridge_p = model.predict_sub(xdf)
+            w = model._lgb_weight
+            blend_pred = w * lgb_p + (1.0 - w) * ridge_p
+            syms = ydf.index.get_level_values("symbol").to_numpy()
+            fret12 = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+            err = blend_pred - fret12
+            for i, s in enumerate(syms):
+                sym_sum_err[s] += float(err[i])
+                sym_count[s] += 1
+            del xdf, ydf, lgb_p, ridge_p, blend_pred, syms, fret12, err
+        biases = {s: sym_sum_err[s] / sym_count[s] for s in sym_sum_err if sym_count[s] > 0}
+        model.set_per_symbol_biases(biases)
+
+        # Learned blend: OLS on held-out validation dates
+        val_days = max(10, len(train_dates) // 5)
+        train_val_dates = train_dates[-val_days:]
+        if train_val_dates:
+            lgb_parts, ridge_parts, y_parts = [], [], []
+            for chunk in _chunk_dates(train_val_dates, N_CHUNKS):
+                raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+                xdf, ydf = feat_gen.genFeatures(raw)
+                del raw
+                lp, rp = model.predict_sub(xdf)
+                lgb_parts.append(lp)
+                ridge_parts.append(rp)
+                y_parts.append(ydf["fret12"].to_numpy(dtype=np.float64))
+                del xdf, ydf
+            lgb_all = np.concatenate(lgb_parts)
+            ridge_all = np.concatenate(ridge_parts)
+            y_all = np.concatenate(y_parts)
+            A = np.column_stack([lgb_all, ridge_all, np.ones(len(y_all))])
+            coef, _, _, _ = np.linalg.lstsq(A, y_all, rcond=None)
+            a, b, c = float(coef[0]), float(coef[1]), float(coef[2])
+            del lgb_parts, ridge_parts, y_parts, lgb_all, ridge_all, y_all, A
+            # Refit on full training data with learned coefficients + biases
+            model.reset()
+            model.set_learned_coef(a, b, c)
+            model.set_per_symbol_biases(biases)
+            for chunk in _chunk_dates(train_dates, N_CHUNKS):
+                raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+                xdf, ydf = feat_gen.genFeatures(raw)
+                del raw
+                y_train = ydf.copy()
+                y_train.loc[:, "fret12"] = _train_target_array(ydf)
+                model.partial_fit(xdf, y_train)
+                del xdf, ydf, y_train
+            model.finalize_fit()
+
     skip_post = RANK_TARGET_TRAINING
     interval_residual = None
     panel_residual = None
