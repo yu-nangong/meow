@@ -18,6 +18,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.rank_blend_model import RankBlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
 NnResidualModel = None
 DeepLOBModel = None
@@ -160,6 +161,8 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
+    if MODEL_TYPE == "rank_blend":
+        return RankBlendModel()
     if MODEL_TYPE == "blend":
         return BlendModel()
     if MODEL_TYPE == "lgb":

@@ -1,25 +1,26 @@
-"""Ensemble blend: LGB + Ridge averaged for complementary signal capture."""
+"""Ensemble blend: RankLGB (lambdarank objective) + Ridge."""
 from __future__ import annotations
 
 import os
 
 import numpy as np
 
-from models.lgb_model import LGBModel
+from models.rank_lgb_model import RankLGBModel
 from mdl import MeowModel
 
 
-class BlendModel:
-    """Trains LGB and Ridge in parallel, averages predictions.
+class RankBlendModel:
+    """Trains RankLGB (lambdarank) and Ridge in parallel, averages predictions.
 
-    LGB captures nonlinear interactions; Ridge captures linear structure.
-    The ensemble should be more robust than either alone.
+    RankLGB optimizes for within-group ranking (aligned with Pearson);
+    Ridge captures linear structure. Different algorithm family from the
+    incumbent LGB regression blend.
     """
 
     def __init__(self):
-        self._lgb = LGBModel()
+        self._lgb = RankLGBModel()
         self._ridge = MeowModel(cacheDir=None)
-        self._lgb_weight = float(os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.0"))
+        self._lgb_weight = float(os.environ.get("MEOW_BLEND_LGB_WEIGHT", "0.7"))
 
     def reset(self):
         self._lgb.reset()
