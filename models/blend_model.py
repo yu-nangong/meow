@@ -9,7 +9,7 @@ from models.lgb_model import LGBModel
 from models.xgb_model import XGBModel
 from mdl import MeowModel
 
-_TREE_TYPE = os.environ.get("MEOW_TREE_TYPE", "lgb").strip().lower()
+_TREE_TYPE = os.environ.get("MEOW_TREE_TYPE", "xgb").strip().lower()
 
 
 class BlendModel:
