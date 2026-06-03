@@ -342,13 +342,15 @@ class MeowFeatureGenerator(object):
 
     def fit_symz_stats(self, h5dir, train_dates):
         """Pre-compute per-symbol mean/std from training data (leakage-free).
-        
-        Collects all training-data symz base columns, then groupby(symbol)
-        to compute mean/std. Stores a DataFrame indexed by symbol with
-        columns like trade_imb, trade_imb_std, flow_imb, flow_imb_std, ...
+
+        Uses online accumulation (sum/sumsq/count per symbol) to avoid
+        loading all training feature matrices into memory at once.
+        Stores a DataFrame indexed by symbol with columns like
+        trade_imb, trade_imb_std, flow_imb, flow_imb_std, ...
         """
+        from collections import defaultdict
         from data_io import iter_days
-        
+
         symz_cols = [
             "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
             "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
@@ -356,35 +358,57 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
-        
+
         dates = sorted(train_dates)
         n_chunks = min(N_CHUNKS, len(dates))
         size = (len(dates) + n_chunks - 1) // n_chunks
         chunks = [dates[i : i + size] for i in range(0, len(dates), size)]
-        
-        all_parts = []
+
+        # Online per-symbol accumulators: sum, sumsq, count for each feature
+        sym_sum = defaultdict(lambda: defaultdict(float))
+        sym_sumsq = defaultdict(lambda: defaultdict(float))
+        sym_count = defaultdict(lambda: defaultdict(int))
+
         for chunk in chunks:
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, _ = self.genFeatures(raw)
             del raw
             available = [c for c in symz_cols if c in xdf.columns]
-            subset = xdf[available].copy()
-            subset["symbol"] = xdf.index.get_level_values("symbol")
-            all_parts.append(subset)
+            if not available:
+                del xdf
+                continue
+            symbols = xdf.index.get_level_values("symbol")
+            for sym, grp_idx in xdf.groupby(symbols, sort=False).groups.items():
+                n = len(grp_idx)
+                for col in available:
+                    vals = xdf[col].iloc[grp_idx].to_numpy(dtype=np.float64, copy=False)
+                    sym_sum[sym][col] += np.nansum(vals)
+                    sym_sumsq[sym][col] += np.nansum(vals * vals)
+                    sym_count[sym][col] += int(np.isfinite(vals).sum())
             del xdf
-        
-        combined = pd.concat(all_parts, ignore_index=True)
-        del all_parts
-        grp = combined.groupby("symbol", sort=False)
-        mean_df = grp.mean()
-        std_df = grp.std().fillna(1e-8).clip(lower=1e-8)
-        
+
+        # Finalize: compute mean and std from accumulators
         stats_data = {}
         for col in symz_cols:
-            if col in mean_df.columns:
-                stats_data[col] = mean_df[col]
-                stats_data[col + "_std"] = std_df[col]
-        
+            means = {}
+            stds = {}
+            for sym in sym_sum:
+                cnt = sym_count[sym].get(col, 0)
+                s = sym_sum[sym].get(col, 0.0)
+                sq = sym_sumsq[sym].get(col, 0.0)
+                if cnt > 1:
+                    mean = s / cnt
+                    variance = max(0.0, sq / cnt - mean * mean)
+                    std = float(np.sqrt(variance)) if variance > 1e-16 else 1e-8
+                else:
+                    mean = 0.0
+                    std = 1.0
+                means[sym] = mean
+                stds[sym] = std
+            if means:
+                stats_data[col] = means
+                stats_data[col + "_std"] = stds
+
         self._symz_stats = pd.DataFrame(stats_data)
         log.inf(f"Computed symz stats for {len(self._symz_stats)} symbols")
         return self
