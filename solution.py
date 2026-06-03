@@ -40,6 +40,8 @@ NN_RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_NN_RESIDUAL_BLEND", "0.25"
 TARGET_STANDARDIZE = os.environ.get("MEOW_TARGET_STANDARDIZE", "1") != "0"
 TARGET_STANDARDIZE_MIN_STD = 1e-8
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
+SAMPLE_WEIGHT_RIDGE = os.environ.get("MEOW_SAMPLE_WEIGHT_RIDGE", "1") != "0"
+SAMPLE_WEIGHT_TAIL_THRESH = float(os.environ.get("MEOW_SAMPLE_WEIGHT_TAIL", "2.5"))
 
 
 def _chunk_dates(dates: List[int], n_chunks: int) -> List[List[int]]:
@@ -98,6 +100,28 @@ def _compute_sym_target_stats(h5dir: str, train_dates: List[int]) -> tuple:
         stds[sym] = float(np.sqrt(var))
     return means, stds
 
+
+
+def _compute_huber_weights(ydf):
+    """Per-interval robust weights: downweight samples with extreme fret12.
+    
+    w_i = 1 / (1 + (|z_i| / tail_thresh)^2)
+    where z_i = (y_i - interval_median) / interval_mad
+    """
+    y = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+    date_vals = ydf.index.get_level_values("date")
+    interval_vals = ydf.index.get_level_values("interval")
+    # Group by (date, interval) to get per-group medians and MADs
+    import pandas as pd
+    df = pd.DataFrame({"y": y, "date": date_vals, "interval": interval_vals})
+    grp = df.groupby(["date", "interval"], sort=False)["y"]
+    median = grp.transform("median").to_numpy(dtype=np.float64)
+    ad = np.abs(y - median)
+    mad = grp.transform(lambda x: x.sub(x.median()).abs().median()).to_numpy(dtype=np.float64)
+    mad = np.maximum(mad, 1e-8)
+    z_score = ad / (mad * 0.6745)  # 0.6745 makes MAD comparable to std for normal
+    w = 1.0 / (1.0 + (z_score / SAMPLE_WEIGHT_TAIL_THRESH) ** 2)
+    return w
 
 def _zscore_target(ydf: pd.DataFrame, means: dict, stds: dict) -> pd.DataFrame:
     """Return ydf with fret12 replaced by per-symbol z-score."""
@@ -228,7 +252,16 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             ydf = _zscore_target(ydf, sym_means, sym_stds)
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
-        model.partial_fit(xdf, y_train)
+        if SAMPLE_WEIGHT_RIDGE:
+            sw = _compute_huber_weights(ydf)
+            sqrt_sw = np.sqrt(np.maximum(sw, 1e-8))
+            xdf_w = xdf.multiply(sqrt_sw, axis=0)
+            y_train_w = y_train.copy()
+            y_train_w["fret12"] = y_train_w["fret12"].to_numpy(dtype=np.float64) * sqrt_sw
+            model.partial_fit(xdf_w, y_train_w)
+            del xdf_w, y_train_w
+        else:
+            model.partial_fit(xdf, y_train)
         del xdf, ydf, y_train
     model.finalize_fit()
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
