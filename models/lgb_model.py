@@ -109,6 +109,11 @@ class LGBModel:
                         self._y_reservoir[j] = y[i]
             self._n_accumulated += n
 
+    def replace_targets(self, y, group=None):
+        """Replace reservoir targets for residual training after Ridge fit."""
+        if self._y_reservoir is not None and len(y) == len(self._y_reservoir):
+            self._y_reservoir = np.asarray(y, dtype=np.float32).ravel()
+
     def finalize_fit(self):
         if self._X_reservoir is None or len(self._y_reservoir) < 1000:
             return
