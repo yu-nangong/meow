@@ -103,6 +103,14 @@ class MeowFeatureGenerator(object):
             "high_gap_cs",
             "trade_buy_high_gap_cs",
             "trade_sell_high_gap_cs",
+            "add_buy_high_gap_cs",
+            "add_buy_low_gap_cs",
+            "add_sell_high_gap_cs",
+            "add_sell_low_gap_cs",
+            "cxl_buy_high_gap_cs",
+            "cxl_buy_low_gap_cs",
+            "cxl_sell_high_gap_cs",
+            "cxl_sell_low_gap_cs",
             "trade_count_imb",
             "add_count_imb",
             "cxl_count_imb",
@@ -123,6 +131,14 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
             "vwad_center_dev",
             "trade_high_center_gap",
             "trade_high_skew",
@@ -181,6 +197,14 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
             "high_vs_trade_high_gap_rank_cs",
+            "add_buy_high_gap_rank_cs",
+            "add_buy_low_gap_rank_cs",
+            "add_sell_high_gap_rank_cs",
+            "add_sell_low_gap_rank_cs",
+            "cxl_buy_high_gap_rank_cs",
+            "cxl_buy_low_gap_rank_cs",
+            "cxl_sell_high_gap_rank_cs",
+            "cxl_sell_low_gap_rank_cs",
             "midpx_level_rank_cs",
             "lastpx_level_rank_cs",
             "high_level_rank_cs",
@@ -390,6 +414,14 @@ class MeowFeatureGenerator(object):
         )
         features["trade_high_skew"] = features["trade_buy_high_gap"] - features["trade_sell_high_gap"]
         features["high_vs_trade_high_gap"] = features["high_gap"] - features["trade_high_center_gap"]
+        features["add_buy_high_gap"] = (df["addBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_buy_low_gap"] = (df["addBuyLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_high_gap"] = (df["addSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_low_gap"] = (df["addSellLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_buy_high_gap"] = (df.get("cxlBuyHigh", df["addBuyHigh"]) - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_buy_low_gap"] = (df.get("cxlBuyLow", df["addBuyLow"]) - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_sell_high_gap"] = (df.get("cxlSellHigh", df["addSellHigh"]) - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_sell_low_gap"] = (df.get("cxlSellLow", df["addSellLow"]) - df["midpx"]) / (df["midpx"] + eps)
         features["bid_slope"] = (df["bid0"] - df["bid19"]) / (df["midpx"] + eps)
         features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
         features["bid_curvature"] = df["bid4"] - 0.5 * (df["bid0"] + df["bid9"])
@@ -502,6 +534,14 @@ class MeowFeatureGenerator(object):
             "high_gap",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
         ]
         cs_frame = base_df[cs_cols]
         cs_means = cs_frame.groupby([df["date"], df["interval"]], sort=False).transform("mean")
@@ -546,6 +586,14 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
             "vwad_center_dev",
             "trade_high_center_gap",
             "trade_high_skew",
