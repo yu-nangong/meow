@@ -317,6 +317,20 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
+        # symz x rank_cs pairwise interactions: combine temporal deviation
+        # (symz) with cross-sectional position (rank_cs).
+        # Both operands bounded, product well-behaved in [-2.5, 2.5].
+        _szx_pairs = [
+            ("trade_imb", "flow_imb"),
+            ("flow_imb", "trade_imb"),
+            ("ret1", "trade_imb"),
+            ("ret6", "ret1"),
+            ("ob_imb0", "depth_pressure_04"),
+            ("spread", "high_minus_low"),
+            ("micro_dev", "ret6"),
+            ("high_gap", "ret1"),
+        ]
+        feature_names.extend(f"{a}_szx_{b}_rank_cs" for a, b in _szx_pairs)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
@@ -611,6 +625,32 @@ class MeowFeatureGenerator(object):
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
 
+        # symz x rank_cs pairwise interactions: temporal deviation x cross-sectional position.
+        _szx_pairs = [
+            ("trade_imb", "flow_imb"),
+            ("flow_imb", "trade_imb"),
+            ("ret1", "trade_imb"),
+            ("ret6", "ret1"),
+            ("ob_imb0", "depth_pressure_04"),
+            ("spread", "high_minus_low"),
+            ("micro_dev", "ret6"),
+            ("high_gap", "ret1"),
+        ]
+        # Combines "how unusual is this stock vs its own history" with "where does it rank cross-sectionally".
+        symz_rank_df = pd.DataFrame(index=df.index)
+        for a, b in _szx_pairs:
+            symz_col = f"{a}_symz"
+            rank_col = f"{b}_rank_cs"
+            if symz_col not in base_df.columns or rank_col not in rank_df.columns:
+                continue
+            s = np.clip(base_df[symz_col].to_numpy(dtype=np.float32, copy=False), -5.0, 5.0)
+            s = np.nan_to_num(s, nan=0.0, posinf=5.0, neginf=-5.0)
+            r = np.nan_to_num(
+                rank_df[rank_col].to_numpy(dtype=np.float32, copy=False),
+                nan=0.0, posinf=0.5, neginf=-0.5,
+            )
+            symz_rank_df[f"{a}_szx_{b}_rank_cs"] = s * r
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -702,6 +742,7 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                symz_rank_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
