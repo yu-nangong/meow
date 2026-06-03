@@ -1,10 +1,43 @@
-"""LightGBM base model with reservoir-sampled chunked training."""
+"""LightGBM base model with reservoir-sampled chunked training.
+
+Supports custom Pearson correlation objective when MEOW_LGB_PEARSON_OBJ=1,
+directly optimizing for the evaluation metric.
+"""
 from __future__ import annotations
 
 import os
 
 import numpy as np
 import lightgbm as lgb
+
+
+def _pearson_grad_hess(preds, train_data):
+    """Custom objective: negative Pearson correlation (to minimize).
+
+    Falls back to MSE when predictions are degenerate (constant).
+    """
+    y = train_data.get_label()
+    n = len(y)
+    y_std = y.std()
+    p_std = preds.std()
+    eps = 1e-8
+    if y_std < eps or p_std < eps:
+        grad = 2.0 * (preds - y) / n
+        hess = np.full(n, 2.0 / n, dtype=np.float64)
+        return grad, hess
+    y_mean = y.mean()
+    p_mean = preds.mean()
+    r = np.corrcoef(y, preds)[0, 1]
+    grad = -(y - y_mean) / (n * y_std * p_std) + r * (preds - p_mean) / (n * p_std * p_std)
+    hess = np.full(n, 1.0 / (n * p_std * p_std), dtype=np.float64)
+    return grad, hess
+
+
+def _pearson_eval(preds, train_data):
+    """Feval: Pearson correlation (higher is better)."""
+    y = train_data.get_label()
+    r = np.corrcoef(y, preds)[0, 1]
+    return "pearson", r, True
 
 
 class LGBModel:
@@ -18,8 +51,7 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
-        # Keep tree inputs narrower than ridge by default; the explicit time-gated
-        # interaction families help the linear model more than the tree blend arm.
+        self.pearson_obj = os.environ.get("MEOW_LGB_PEARSON_OBJ", "0") != "0"
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
@@ -28,8 +60,6 @@ class LGBModel:
             ).split(",")
             if f.strip()
         }
-        # Prune only the densest price-like raw-level rank columns by default.
-        # Keep queue/flow level ranks and all z-scores available to the tree arm.
         self.exclude_patterns = tuple(
             pattern.strip()
             for pattern in os.environ.get(
@@ -54,7 +84,6 @@ class LGBModel:
         self._feature_names = None
 
     def partial_fit(self, xdf, ydf):
-        # Select columns, excluding unwanted families
         if self._feature_names is None:
             cols = [c for c in xdf.columns if self._keep_column(c)]
             self._feature_names = cols
@@ -69,12 +98,10 @@ class LGBModel:
         else:
             capacity = self._X_reservoir.shape[0]
             if capacity < self.max_rows:
-                # Still filling — concatenate up to max_rows
                 take = min(n, self.max_rows - capacity)
                 self._X_reservoir = np.concatenate([self._X_reservoir, x[:take]], axis=0)
                 self._y_reservoir = np.concatenate([self._y_reservoir, y[:take]], axis=0)
             else:
-                # Reservoir sampling: replace with decreasing probability
                 for i in range(n):
                     j = self._rng.randint(0, self._n_accumulated + i + 1)
                     if j < capacity:
@@ -97,13 +124,17 @@ class LGBModel:
             reg_lambda=self.reg_lambda,
             verbose=-1,
             random_state=42,
-            n_jobs=1,  # single-thread to avoid grader memory pressure
+            n_jobs=1,
         )
-        train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
+        train_data = lgb.Dataset(
+            self._X_reservoir, label=self._y_reservoir, free_raw_data=False,
+        )
+        if self.pearson_obj:
+            params["objective"] = _pearson_grad_hess
+            params["boost_from_average"] = True
         self._model = lgb.train(
-            params,
-            train_data,
-            num_boost_round=self.n_estimators,
+            params, train_data, num_boost_round=self.n_estimators,
+            feval=_pearson_eval if self.pearson_obj else None,
         )
 
     def predict(self, xdf):
