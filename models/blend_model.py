@@ -1,4 +1,4 @@
-"""Ensemble blend: (LGB or XGB) + Ridge averaged for complementary signal capture."""
+"""Ensemble blend: (LGB, XGB, or CatBoost) + Ridge averaged for complementary signal capture."""
 from __future__ import annotations
 
 import os
@@ -7,6 +7,7 @@ import numpy as np
 
 from models.lgb_model import LGBModel
 from models.xgb_model import XGBModel
+from models.cat_model import CatModel
 from mdl import MeowModel
 
 _TREE_TYPE = os.environ.get("MEOW_TREE_TYPE", "lgb").strip().lower()
@@ -21,6 +22,8 @@ class BlendModel:
     def __init__(self):
         if _TREE_TYPE == "xgb":
             self._tree = XGBModel()
+        elif _TREE_TYPE == "cat":
+            self._tree = CatModel()
         else:
             self._tree = LGBModel()
         self._ridge = MeowModel(cacheDir=None)
