@@ -51,7 +51,7 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
-        self.pearson_obj = os.environ.get("MEOW_LGB_PEARSON_OBJ", "0") != "0"
+        self.pearson_obj = os.environ.get("MEOW_LGB_PEARSON_OBJ", "1") != "0"
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
