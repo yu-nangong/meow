@@ -18,6 +18,7 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.per_interval_blend import PerIntervalBlendModel
 
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
@@ -153,6 +154,8 @@ def _create_base_model():
         return LGBModel()
     if MODEL_TYPE == "elasticnet":
         return ElasticNetModel(cacheDir=None)
+    if MODEL_TYPE == "per_interval_blend":
+        return PerIntervalBlendModel()
     return MeowModel(cacheDir=None)
 
 
