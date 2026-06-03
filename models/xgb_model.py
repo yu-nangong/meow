@@ -123,6 +123,7 @@ class XGBModel:
             subsample=self.subsample,
             colsample_bytree=self.colsample_bytree,
             objective=self.objective,
+            reg_lambda=0.0,
             tree_method="hist",
             random_state=42,
             nthread=1,
