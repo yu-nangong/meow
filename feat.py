@@ -126,6 +126,19 @@ class MeowFeatureGenerator(object):
             "vwad_center_dev",
             "trade_high_center_gap",
             "trade_high_skew",
+            "trade_buy_low_gap",
+            "trade_sell_low_gap",
+            "trade_low_skew",
+            "trade_buy_range",
+            "trade_sell_range",
+            "add_buy_high_gap",
+            "add_sell_high_gap",
+            "add_high_skew",
+            "cxl_buy_high_gap",
+            "cxl_sell_high_gap",
+            "cxl_high_skew",
+            "add_vs_cxl_buy_gap",
+            "add_vs_cxl_sell_gap",
             "high_vs_trade_high_gap",
             "add_turn_imb",
             "cxl_turn_imb",
@@ -389,6 +402,26 @@ class MeowFeatureGenerator(object):
             features["trade_buy_high_gap"] + features["trade_sell_high_gap"]
         )
         features["trade_high_skew"] = features["trade_buy_high_gap"] - features["trade_sell_high_gap"]
+
+        # === New features from unused price-extreme columns ===
+        # Trade low extremes (buy/sell lows currently unused)
+        features["trade_buy_low_gap"] = (df["tradeBuyLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["trade_sell_low_gap"] = (df["tradeSellLow"] - df["midpx"]) / (df["midpx"] + eps)
+        features["trade_low_skew"] = features["trade_buy_low_gap"] - features["trade_sell_low_gap"]
+        # Trade price range (extreme span)
+        features["trade_buy_range"] = (df["tradeBuyHigh"] - df["tradeBuyLow"]) / (df["midpx"] + eps)
+        features["trade_sell_range"] = (df["tradeSellHigh"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+        # Add order price extremes (currently unused)
+        features["add_buy_high_gap"] = (df["addBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_high_gap"] = (df["addSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_high_skew"] = features["add_buy_high_gap"] - features["add_sell_high_gap"]
+        # Cancel order price extremes (currently unused)
+        features["cxl_buy_high_gap"] = (df["cxlBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_sell_high_gap"] = (df["cxlSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_high_skew"] = features["cxl_buy_high_gap"] - features["cxl_sell_high_gap"]
+        # Add vs cancel price asymmetry
+        features["add_vs_cxl_buy_gap"] = features["add_buy_high_gap"] - features["cxl_buy_high_gap"]
+        features["add_vs_cxl_sell_gap"] = features["add_sell_high_gap"] - features["cxl_sell_high_gap"]
         features["high_vs_trade_high_gap"] = features["high_gap"] - features["trade_high_center_gap"]
         features["bid_slope"] = (df["bid0"] - df["bid19"]) / (df["midpx"] + eps)
         features["ask_slope"] = (df["ask19"] - df["ask0"]) / (df["midpx"] + eps)
