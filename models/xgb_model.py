@@ -25,7 +25,7 @@ class XGBModel:
             f.strip()
             for f in os.environ.get(
                 "MEOW_XGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+                "time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
             ).split(",")
             if f.strip()
         }
