@@ -582,6 +582,30 @@ class MeowFeatureGenerator(object):
                 * rank_df[b].to_numpy(dtype=np.float32, copy=False)
             )
 
+        # Delta rank_cs features: temporal rank momentum within each symbol.
+        # Captures "is this stock's rank rising or falling?" — orthogonal to
+        # cross-sectional positioning. No leakage: shift(1) uses only prior time
+        # within the chunk. First row per symbol filled to 0.
+        _delta_cols = [
+            "trade_imb_rank_cs", "flow_imb_rank_cs", "ret1_rank_cs",
+            "ret6_rank_cs", "range_pos_rank_cs", "trade_count_share_rank_cs",
+            "top_queue_share_imb_rank_cs", "depth_pressure_slope_rank_cs",
+            "high_gap_rank_cs", "ob_imb19_rank_cs", "depth_pressure_1019_rank_cs",
+            "ob_imb4_rank_cs", "ret3_rank_cs", "ret12_resid_rank_cs",
+            "day_open_gap_rank_cs", "ret24_rank_cs", "sell_vwad_dev_rank_cs",
+            "trade_vwad_gap_rank_cs", "high_minus_low_rank_cs", "micro_dev_rank_cs",
+            "buy_vwad_dev_rank_cs", "spread_rank_cs", "ob_imb0_rank_cs",
+            "turnover_imb_rank_cs", "depth_pressure_04_rank_cs",
+        ]
+        delta_rank_df = pd.DataFrame(index=df.index)
+        for col in _delta_cols:
+            short = col.replace("_rank_cs", "")
+            delta_rank_df[f"d_{short}_rank_cs"] = (
+                rank_df[col]
+                - rank_df[col].groupby(df["symbol"], sort=False).shift(1)
+            )
+        delta_rank_df = delta_rank_df.fillna(0.0)
+
         interval_max = df.groupby("date", sort=False)["interval"].transform("max").clip(lower=1)
         interval_frac_centered = df["interval"] / interval_max - 0.5
         interval_u = np.abs(interval_frac_centered)
@@ -673,6 +697,7 @@ class MeowFeatureGenerator(object):
                 cs_out,
                 rank_df,
                 pair_int_df,
+                delta_rank_df,
                 time_df,
                 time_interactions_df,
                 u_interactions_df,
