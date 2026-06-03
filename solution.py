@@ -77,7 +77,8 @@ def _compute_sym_target_stats(h5dir: str, train_dates: List[int]) -> tuple:
     sym_sq = {}
     for day in train_dates:
         path = os.path.join(h5dir, f"{day}.h5")
-        df = pd.read_hdf(path, columns=["symbol", "fret12"])
+        df = pd.read_hdf(path)
+        df = df[["symbol", "fret12"]]
         for sym, grp in df.groupby("symbol", sort=False):
             y = grp["fret12"].to_numpy(dtype=np.float64)
             y = y[np.isfinite(y)]
