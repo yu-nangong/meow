@@ -326,6 +326,56 @@ class MeowFeatureGenerator(object):
         self.ycol = "fret12"
         self.mcols = ["symbol", "date", "interval"]
         self._raw_level_pairs = self._get_raw_level_pairs()
+        self._symz_stats = None  # pre-computed per-symbol stats DataFrame (leakage-free)
+
+    def fit_symz_stats(self, h5dir, train_dates):
+        """Pre-compute per-symbol mean/std from training data (leakage-free).
+        
+        Collects all training-data symz base columns, then groupby(symbol)
+        to compute mean/std. Stores a DataFrame indexed by symbol with
+        columns like trade_imb, trade_imb_std, flow_imb, flow_imb_std, ...
+        """
+        from data_io import iter_days
+        
+        symz_cols = [
+            "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+            "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+            "depth_pressure_04", "range_pos", "turnover_imb",
+            "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+        ]
+        N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
+        
+        dates = sorted(train_dates)
+        n_chunks = min(N_CHUNKS, len(dates))
+        size = (len(dates) + n_chunks - 1) // n_chunks
+        chunks = [dates[i : i + size] for i in range(0, len(dates), size)]
+        
+        all_parts = []
+        for chunk in chunks:
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, _ = self.genFeatures(raw)
+            del raw
+            available = [c for c in symz_cols if c in xdf.columns]
+            subset = xdf[available].copy()
+            subset["symbol"] = xdf.index.get_level_values("symbol")
+            all_parts.append(subset)
+            del xdf
+        
+        combined = pd.concat(all_parts, ignore_index=True)
+        del all_parts
+        grp = combined.groupby("symbol", sort=False)
+        mean_df = grp.mean()
+        std_df = grp.std().fillna(1e-8).clip(lower=1e-8)
+        
+        stats_data = {}
+        for col in symz_cols:
+            if col in mean_df.columns:
+                stats_data[col] = mean_df[col]
+                stats_data[col + "_std"] = std_df[col]
+        
+        self._symz_stats = pd.DataFrame(stats_data)
+        log.inf(f"Computed symz stats for {len(self._symz_stats)} symbols")
+        return self
 
     def genFeatures(self, df):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
@@ -510,14 +560,23 @@ class MeowFeatureGenerator(object):
         ]
         symz_available = [c for c in symz_cols if c in base_df.columns]
         if symz_available:
-            sym_grp = base_df[symz_available].groupby(df["symbol"], sort=False)
-            sym_mean = sym_grp.transform("mean")
-            sym_std = sym_grp.transform("std")
-            sym_std = sym_std.where(sym_std > 1e-8, 1.0)
-            sym_z = (base_df[symz_available] - sym_mean) / sym_std
-            sym_z = sym_z.fillna(0.0)
-            sym_z.columns = [f"{col}_symz" for col in symz_available]
-            base_df = pd.concat([base_df, sym_z.astype(np.float32)], axis=1)
+            if self._symz_stats is not None:
+                for col in symz_available:
+                    mean_s = self._symz_stats[col].reindex(df["symbol"]).fillna(0.0)
+                    std_s = self._symz_stats[col + "_std"].reindex(df["symbol"]).fillna(1.0).clip(lower=1e-8)
+                    base_df[f"{col}_symz"] = (
+                        (base_df[col].to_numpy(dtype=np.float64) - mean_s.to_numpy(dtype=np.float64))
+                        / std_s.to_numpy(dtype=np.float64)
+                    ).clip(-10, 10)
+            else:
+                sym_grp = base_df[symz_available].groupby(df["symbol"], sort=False)
+                sym_mean = sym_grp.transform("mean")
+                sym_std = sym_grp.transform("std")
+                sym_std = sym_std.where(sym_std > 1e-8, 1.0)
+                sym_z = (base_df[symz_available] - sym_mean) / sym_std
+                sym_z = sym_z.fillna(0.0).clip(-10, 10)
+                sym_z.columns = [f"{col}_symz" for col in symz_available]
+                base_df = pd.concat([base_df, sym_z.astype(np.float32)], axis=1)
 
         cs_cols = [
             "trade_imb",
