@@ -1,6 +1,6 @@
-"""XGBoost model with pairwise ranking objective for blend ensemble.
+"""XGBoost model with NDCG ranking objective for blend ensemble.
 
-Uses rank:pairwise to directly optimize for within-group ordering,
+Uses rank:ndcg to directly optimize for within-group ordering,
 which is what Pearson correlation fundamentally measures.
 Groups are (date, interval) pairs.
 """
@@ -20,7 +20,7 @@ class XGBModel:
         self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "200"))
         self.subsample = float(os.environ.get("MEOW_XGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_XGB_COLSAMPLE_BYTREE", "0.8"))
-        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "reg:squarederror").strip()
+        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "rank:ndcg").strip()
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
