@@ -42,7 +42,7 @@ def _pearson_eval(preds, train_data):
 
 class LGBModel:
     def __init__(self):
-        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
+        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "500000"))
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
         self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
@@ -56,7 +56,7 @@ class LGBModel:
             f.strip()
             for f in os.environ.get(
                 "MEOW_LGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+                "",
             ).split(",")
             if f.strip()
         }
@@ -64,8 +64,7 @@ class LGBModel:
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
-                "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
-                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
+                "",
             ).split(",")
             if pattern.strip()
         )
