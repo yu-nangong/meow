@@ -15,12 +15,14 @@ import xgboost as xgb
 class XGBModel:
     def __init__(self):
         self.max_rows = int(os.environ.get("MEOW_XGB_MAX_ROWS", "500000"))
-        self.max_depth = int(os.environ.get("MEOW_XGB_MAX_DEPTH", "6"))
-        self.learning_rate = float(os.environ.get("MEOW_XGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "200"))
+        self.max_depth = int(os.environ.get("MEOW_XGB_MAX_DEPTH", "7"))
+        self.learning_rate = float(os.environ.get("MEOW_XGB_LEARNING_RATE", "0.03"))
+        self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "400"))
         self.subsample = float(os.environ.get("MEOW_XGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_XGB_COLSAMPLE_BYTREE", "0.8"))
-        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "reg:squarederror").strip()
+        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "rank:pairwise").strip()
+        self.reg_lambda = float(os.environ.get("MEOW_XGB_REG_LAMBDA", "1.0"))
+        self.reg_alpha = float(os.environ.get("MEOW_XGB_REG_ALPHA", "0.0"))
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
@@ -117,6 +119,8 @@ class XGBModel:
             dtrain = xgb.DMatrix(self._X_reservoir, label=self._y_reservoir)
 
         params = dict(
+            reg_lambda=self.reg_lambda,
+            reg_alpha=self.reg_alpha,
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
             n_estimators=self.n_estimators,

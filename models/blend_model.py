@@ -24,7 +24,7 @@ class BlendModel:
         else:
             self._tree = LGBModel()
         self._ridge = MeowModel(cacheDir=None)
-        self._tree_weight = float(os.environ.get("MEOW_BLEND_TREE_WEIGHT", "0.7"))
+        self._tree_weight = float(os.environ.get("MEOW_BLEND_TREE_WEIGHT", "0.75"))
 
     def reset(self):
         self._tree.reset()
