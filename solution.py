@@ -179,12 +179,27 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
+    nn_residual = None
+    if NN_RESIDUAL_ENABLED:
+        nn_residual = NnResidualModel()
+        nn_residual.reset()
+        for chunk in _chunk_dates(train_dates, N_CHUNKS):
+            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+            xdf, ydf = feat_gen.genFeatures(raw)
+            del raw
+            base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            resid = _train_target_array(ydf) - base_pred
+            nn_residual.partial_fit(xdf, resid)
+            del xdf, ydf, base_pred, resid
+        nn_residual.finalize_fit()
     interval_residual = IntervalResidualRidge()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        if nn_residual is not None:
+            base_pred = base_pred + NN_RESIDUAL_BLEND_WEIGHT * nn_residual.predict(xdf)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
@@ -197,26 +212,13 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+            if nn_residual is not None:
+                forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_residual.predict(xdf)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
             panel_residual.partial_fit(ydf, resid)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
-    nn_residual = None
-    if NN_RESIDUAL_ENABLED:
-        nn_residual = NnResidualModel()
-        nn_residual.reset()
-        for chunk in _chunk_dates(train_dates, N_CHUNKS):
-            raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-            xdf, ydf = feat_gen.genFeatures(raw)
-            del raw
-            forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-            forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
-            forecast = forecast + panel_residual.predict(ydf)
-            resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
-            nn_residual.partial_fit(xdf, resid)
-            del xdf, ydf, forecast, resid
-        nn_residual.finalize_fit()
 
     seq_model = None
     if SEQ_MODEL_ENABLED:
@@ -244,13 +246,13 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
-        forecast = forecast + panel_residual.predict(ydf)
         if nn_residual is not None:
             nn_resid = nn_residual.predict(xdf)
         else:
             nn_resid = np.zeros(len(raw), dtype=np.float64)
         forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_resid
+        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        forecast = forecast + panel_residual.predict(ydf)
         forecast = (1.0 - SEQ_BLEND_WEIGHT) * forecast + SEQ_BLEND_WEIGHT * seq_pred
         ydf.loc[:, "forecast"] = forecast
         del raw, xdf
