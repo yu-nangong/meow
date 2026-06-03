@@ -56,7 +56,7 @@ class LGBModel:
             f.strip()
             for f in os.environ.get(
                 "MEOW_LGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
+                "",
             ).split(",")
             if f.strip()
         }
@@ -64,8 +64,7 @@ class LGBModel:
             pattern.strip()
             for pattern in os.environ.get(
                 "MEOW_LGB_EXCLUDE_PATTERNS",
-                "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
-                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
+                "",
             ).split(",")
             if pattern.strip()
         )
