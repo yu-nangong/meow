@@ -14,7 +14,7 @@ import xgboost as xgb
 
 class XGBModel:
     def __init__(self):
-        self.max_rows = int(os.environ.get("MEOW_XGB_MAX_ROWS", "500000"))
+        self.max_rows = int(os.environ.get("MEOW_XGB_MAX_ROWS", "600000"))
         self.max_depth = int(os.environ.get("MEOW_XGB_MAX_DEPTH", "6"))
         self.learning_rate = float(os.environ.get("MEOW_XGB_LEARNING_RATE", "0.05"))
         self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "200"))
