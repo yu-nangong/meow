@@ -308,6 +308,19 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap_rank_cs_x_u",
             "micro_dev_rank_cs_x_u",
         ]
+
+        # Per-symbol intraday z-scores: captures deviation from stock's typical value that day
+        sym_z_features = [
+            "trade_imb_sym_z",
+            "flow_imb_sym_z",
+            "depth_pressure_slope_sym_z",
+            "micro_dev_sym_z",
+            "spread_sym_z",
+            "ret1_sym_z",
+            "ret6_sym_z",
+            "trade_vwad_gap_sym_z",
+        ]
+        feature_names.extend(sym_z_features)
         nonlinear_time_interactions = cls._nonlinear_time_interactions()
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
@@ -435,6 +448,22 @@ class MeowFeatureGenerator(object):
 
         # === Multiplicative interactions for tree model signal ===
         base_df.loc[:, "trade_imb_x_ob0"] = base_df["trade_imb"] * base_df["ob_imb0"]
+
+        # Per-symbol intraday z-scores: deviation from stock-daily mean
+        sym_z_pairs = [
+            ("trade_imb_sym_z", "trade_imb"),
+            ("flow_imb_sym_z", "flow_imb"),
+            ("depth_pressure_slope_sym_z", "depth_pressure_slope"),
+            ("micro_dev_sym_z", "micro_dev"),
+            ("spread_sym_z", "spread"),
+            ("ret1_sym_z", "ret1"),
+            ("ret6_sym_z", "ret6"),
+            ("trade_vwad_gap_sym_z", "trade_vwad_gap"),
+        ]
+        for out_col, src_col in sym_z_pairs:
+            mean_s = base_sym_day[src_col].transform("mean")
+            std_s = base_sym_day[src_col].transform("std")
+            base_df.loc[:, out_col] = (base_df[src_col] - mean_s) / (std_s + 1e-8)
         base_df.loc[:, "micro_dev_x_ret6"] = base_df["micro_dev"] * base_df["ret6"]
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
