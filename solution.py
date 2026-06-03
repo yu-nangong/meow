@@ -35,8 +35,10 @@ FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADA
 SEQ_MODEL_ENABLED = os.environ.get("MEOW_SEQ_MODEL", "0") != "0"
 SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
 SEQ_MODEL_TYPE = os.environ.get("MEOW_SEQ_MODEL_TYPE", "mlp").strip().lower()
-NN_RESIDUAL_ENABLED = os.environ.get("MEOW_NN_RESIDUAL", "1") != "0"
+NN_RESIDUAL_ENABLED = os.environ.get("MEOW_NN_RESIDUAL", "0") != "0"
 NN_RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_NN_RESIDUAL_BLEND", "0.25"))
+QUANTILE_CALIB_ENABLED = os.environ.get("MEOW_QUANTILE_CALIB", "1") != "0"
+N_QUANTILES = int(os.environ.get("MEOW_N_QUANTILES", "20"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -148,6 +150,48 @@ def _fit_forecast_mean_shrink(
     return float(np.clip(numer / denom, 0.0, FORECAST_CS_MEAN_SHRINK_MAX))
 
 
+
+def _fit_quantile_calib(
+    h5dir, feat_gen, model, interval_residual, panel_residual,
+    forecast_cs_mean_shrink, train_dates, n_quantiles=20,
+):
+    """Fit quantile-based bias correction: mean residual per prediction bin."""
+    all_preds = []
+    all_resids = []
+    for chunk in _chunk_dates(train_dates, N_CHUNKS):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw
+        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
+        forecast = forecast + panel_residual.predict(ydf)
+        resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
+        all_preds.append(forecast)
+        all_resids.append(resid)
+        del xdf, ydf
+    preds = np.concatenate(all_preds)
+    resids = np.concatenate(all_resids)
+    boundaries = np.quantile(preds, np.linspace(0, 1, n_quantiles + 1))
+    boundaries[0] = -np.inf
+    boundaries[-1] = np.inf
+    bin_idx = np.digitize(preds, boundaries) - 1
+    bin_means = np.zeros(n_quantiles, dtype=np.float64)
+    for q in range(n_quantiles):
+        mask = bin_idx == q
+        if mask.sum() > 0:
+            bin_means[q] = resids[mask].mean()
+    return boundaries, bin_means
+
+
+def _apply_quantile_calib(preds, boundaries, bin_means):
+    """Apply quantile-based bias correction."""
+    if boundaries is None or bin_means is None:
+        return preds
+    bin_idx = np.digitize(preds, boundaries) - 1
+    correction = bin_means[bin_idx]
+    return preds + correction
+
+
 def _create_base_model():
     if MODEL_TYPE == "blend":
         return BlendModel()
@@ -202,6 +246,14 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             panel_residual.partial_fit(ydf, resid)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
+    qc_boundaries = None
+    qc_bin_means = None
+    if QUANTILE_CALIB_ENABLED:
+        qc_boundaries, qc_bin_means = _fit_quantile_calib(
+            h5dir, feat_gen, model, interval_residual, panel_residual,
+            forecast_cs_mean_shrink, train_dates, N_QUANTILES,
+        )
+
     nn_residual = None
     if NN_RESIDUAL_ENABLED:
         nn_residual = NnResidualModel()
@@ -246,6 +298,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
+        forecast = _apply_quantile_calib(forecast, qc_boundaries, qc_bin_means)
         if nn_residual is not None:
             nn_resid = nn_residual.predict(xdf)
         else:
