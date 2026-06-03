@@ -24,6 +24,7 @@ PER_SYMBOL_CALIBRATION = os.environ.get("MEOW_PER_SYMBOL_CALIBRATION", "0") != "
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 RANK_TARGET_TRAINING = os.environ.get("MEOW_RANK_TARGET", "0") != "0"
 
+GLOBAL_SYMZ = os.environ.get("MEOW_GLOBAL_SYMZ", "0") != "0"
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.0"))
 LEARN_FORECAST_CS_MEAN_SHRINK = os.environ.get("MEOW_LEARN_FORECAST_CS_MEAN_SHRINK", "0") != "0"
@@ -136,6 +137,56 @@ def _compute_per_symbol_biases(
     return dict(biases)
 
 
+
+def _compute_global_symz_stats(
+    h5dir: str,
+    feat_gen: MeowFeatureGenerator,
+    train_dates: List[int],
+    n_chunks: int,
+) -> Dict[str, Dict[str, Dict[str, float]]]:
+    """Compute per-symbol global mean and std for symz base columns.
+
+    Returns: {col_name: {symbol: {"mean": float, "std": float}, ...}, ...}
+    Used by global symz features: (base_value - global_mean) / global_std.
+    """
+    from collections import defaultdict
+    symz_cols = [
+        "trade_imb", "flow_imb", "ob_imb0", "spread", "micro_dev",
+        "ret1", "ret3", "ret6", "ret12_resid", "high_gap", "low_gap",
+        "depth_pressure_04", "range_pos", "turnover_imb",
+        "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
+    ]
+    accum = {col: defaultdict(lambda: [0.0, 0.0, 0]) for col in symz_cols}
+    for chunk in _chunk_dates(train_dates, n_chunks):
+        raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
+        xdf, ydf = feat_gen.genFeatures(raw)
+        del raw, ydf
+        syms = xdf.index.get_level_values("symbol").to_numpy()
+        for col in symz_cols:
+            if col in xdf.columns:
+                vals = xdf[col].to_numpy(dtype=np.float64, copy=False)
+                for i, s in enumerate(syms):
+                    v = float(vals[i])
+                    if np.isfinite(v):
+                        acc = accum[col][s]
+                        acc[0] += v
+                        acc[1] += v * v
+                        acc[2] += 1
+        del xdf
+    stats: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for col in symz_cols:
+        col_stats: Dict[str, Dict[str, float]] = {}
+        for sym, (sm, sm_sq, cnt) in accum[col].items():
+            if cnt > 1:
+                mean = sm / cnt
+                var = sm_sq / cnt - mean * mean
+                std = np.sqrt(max(var, 0.0))
+                col_stats[sym] = {"mean": mean, "std": max(std, 1e-8)}
+        if col_stats:
+            stats[col] = col_stats
+    return stats
+
+
 def _postprocess_forecast(ydf: pd.DataFrame, pred: np.ndarray, mean_shrink: float) -> np.ndarray:
     if not mean_shrink and not FORECAST_CS_MEAN_ADAPTIVE_BETA:
         return pred
@@ -201,11 +252,17 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
+
+    # Pre-compute global per-symbol stats for multi-horizon symz
+    global_symz_stats = None
+    if GLOBAL_SYMZ:
+        global_symz_stats = _compute_global_symz_stats(h5dir, feat_gen, train_dates, N_CHUNKS)
+
     model.reset()
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
+        xdf, ydf = feat_gen.genFeatures(raw, global_symz_stats=global_symz_stats)
         del raw
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
@@ -232,7 +289,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         interval_residual = IntervalResidualRidge()
         for chunk in _chunk_dates(train_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-            xdf, ydf = feat_gen.genFeatures(raw)
+            xdf, ydf = feat_gen.genFeatures(raw, global_symz_stats=global_symz_stats)
             del raw
             base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             resid = _train_target_array(ydf) - base_pred
@@ -244,7 +301,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         panel_dates = train_dates[-panel_residual.tail_days :] if panel_residual.tail_days > 0 else train_dates
         for chunk in _chunk_dates(panel_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-            xdf, ydf = feat_gen.genFeatures(raw)
+            xdf, ydf = feat_gen.genFeatures(raw, global_symz_stats=global_symz_stats)
             del raw
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
@@ -256,7 +313,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     y_parts, p_parts = [], []
     for chunk in _chunk_dates(test_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
-        xdf, ydf = feat_gen.genFeatures(raw)
+        xdf, ydf = feat_gen.genFeatures(raw, global_symz_stats=global_symz_stats)
         del raw
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)

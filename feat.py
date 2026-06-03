@@ -317,6 +317,7 @@ class MeowFeatureGenerator(object):
             "day_open_gap", "trade_count_share", "ob_imb19", "ob_imb4",
         ]
         feature_names.extend(f"{col}_symz" for col in _symz_base)
+        feature_names.extend(f"{col}_globalsymz" for col in _symz_base)
         feature_names.extend(f"{col}_x_time_sq" for col in nonlinear_time_interactions)
         feature_names.extend(f"{col}_x_u_sq" for col in nonlinear_time_interactions)
         return feature_names
@@ -327,7 +328,7 @@ class MeowFeatureGenerator(object):
         self.mcols = ["symbol", "date", "interval"]
         self._raw_level_pairs = self._get_raw_level_pairs()
 
-    def genFeatures(self, df):
+    def genFeatures(self, df, global_symz_stats=None):
         log.inf("Generating {} features from raw data...".format(len(self.featureNames())))
         eps = 1e-6
         df = df.sort_values(self.mcols, kind="mergesort").copy()
@@ -518,6 +519,26 @@ class MeowFeatureGenerator(object):
             sym_z = sym_z.fillna(0.0)
             sym_z.columns = [f"{col}_symz" for col in symz_available]
             base_df = pd.concat([base_df, sym_z.astype(np.float32)], axis=1)
+
+        # === Global per-symbol z-score features ===
+        # Chunk-local symz answers "how unusual within this ~15-day window?"
+        # Global symz answers "how unusual relative to historical norms?"
+        # Uses per-symbol statistics computed from full training data.
+        symz_globals = pd.DataFrame(0.0, index=df.index,
+                                    columns=[f"{col}_globalsymz" for col in symz_available])
+        if global_symz_stats is not None and symz_available:
+            syms = df["symbol"]
+            for col in symz_available:
+                col_stats = global_symz_stats.get(col, {})
+                if col_stats:
+                    gmean_map = pd.Series({s: v["mean"] for s, v in col_stats.items()})
+                    gstd_map = pd.Series({s: max(v["std"], 1e-8) for s, v in col_stats.items()})
+                    gmean = syms.map(gmean_map).fillna(0.0).to_numpy(dtype=np.float32)
+                    gstd = syms.map(gstd_map).fillna(1.0).to_numpy(dtype=np.float32)
+                    gz = (base_df[col].to_numpy(dtype=np.float32, copy=False) - gmean) / gstd
+                    symz_globals[f"{col}_globalsymz"] = np.nan_to_num(
+                        gz, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        base_df = pd.concat([base_df, symz_globals], axis=1)
 
         cs_cols = [
             "trade_imb",
