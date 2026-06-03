@@ -21,6 +21,7 @@ from models.blend_model import BlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
 from models.deeplob_model import DeepLOBModel
 from models.nn_residual import NnResidualModel
+from models.xgb_residual import XGBResidualModel
 
 from models.pearson_nn import PearsonNNModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
@@ -35,8 +36,8 @@ FORECAST_CS_MEAN_ADAPTIVE_BETA = float(os.environ.get("MEOW_FORECAST_CS_MEAN_ADA
 SEQ_MODEL_ENABLED = os.environ.get("MEOW_SEQ_MODEL", "0") != "0"
 SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
 SEQ_MODEL_TYPE = os.environ.get("MEOW_SEQ_MODEL_TYPE", "mlp").strip().lower()
-NN_RESIDUAL_ENABLED = os.environ.get("MEOW_NN_RESIDUAL", "1") != "0"
-NN_RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_NN_RESIDUAL_BLEND", "0.25"))
+RESIDUAL_TYPE = os.environ.get("MEOW_RESIDUAL_TYPE", "xgb").strip().lower()  # "xgb" or "nn"
+RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_RESIDUAL_BLEND", "0.25"))
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -179,27 +180,30 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     forecast_cs_mean_shrink = FORECAST_CS_MEAN_SHRINK
     if LEARN_FORECAST_CS_MEAN_SHRINK:
         forecast_cs_mean_shrink = _fit_forecast_mean_shrink(h5dir, feat_gen, model, train_dates)
-    nn_residual = None
-    if NN_RESIDUAL_ENABLED:
-        nn_residual = NnResidualModel()
-        nn_residual.reset()
+    residual_model = None
+    if RESIDUAL_TYPE in ("xgb", "nn"):
+        if RESIDUAL_TYPE == "xgb":
+            residual_model = XGBResidualModel()
+        else:
+            residual_model = NnResidualModel()
+        residual_model.reset()
         for chunk in _chunk_dates(train_dates, N_CHUNKS):
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
             base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             resid = _train_target_array(ydf) - base_pred
-            nn_residual.partial_fit(xdf, resid)
+            residual_model.partial_fit(xdf, resid)
             del xdf, ydf, base_pred, resid
-        nn_residual.finalize_fit()
+        residual_model.finalize_fit()
     interval_residual = IntervalResidualRidge()
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        if nn_residual is not None:
-            base_pred = base_pred + NN_RESIDUAL_BLEND_WEIGHT * nn_residual.predict(xdf)
+        if residual_model is not None:
+            base_pred = base_pred + RESIDUAL_BLEND_WEIGHT * residual_model.predict(xdf)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
         del xdf, ydf, base_pred, resid
@@ -212,8 +216,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-            if nn_residual is not None:
-                forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_residual.predict(xdf)
+            if residual_model is not None:
+                forecast = forecast + RESIDUAL_BLEND_WEIGHT * residual_model.predict(xdf)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
             panel_residual.partial_fit(ydf, resid)
@@ -246,11 +250,11 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         xdf, ydf = feat_gen.genFeatures(raw)
         ydf = ydf.copy()
         forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
-        if nn_residual is not None:
-            nn_resid = nn_residual.predict(xdf)
+        if residual_model is not None:
+            resid_correction = residual_model.predict(xdf)
         else:
-            nn_resid = np.zeros(len(raw), dtype=np.float64)
-        forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_resid
+            resid_correction = np.zeros(len(raw), dtype=np.float64)
+        forecast = forecast + RESIDUAL_BLEND_WEIGHT * resid_correction
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
         forecast = (1.0 - SEQ_BLEND_WEIGHT) * forecast + SEQ_BLEND_WEIGHT * seq_pred
