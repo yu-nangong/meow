@@ -4,7 +4,7 @@ Fundamentally different from all existing models:
 - Operates on residuals, not raw target — easier learning problem.
 - Uses conservative blend weight — cannot destroy the base signal.
 - Global z-score normalization on reservoir, not per-chunk.
-- Proper batch size (1024) and epoch count (15) vs failed Pearson NN.
+- Proper batch size (1024), no dropout, and doubled epoch count (30) vs failed Pearson NN.
 """
 from __future__ import annotations
 
@@ -27,14 +27,12 @@ class ResidualNet(nn.Module):
         self.fc3 = nn.Linear(hidden // 2, hidden // 4)
         self.bn3 = nn.BatchNorm1d(hidden // 4)
         self.head = nn.Linear(hidden // 4, 1)
-        self.dropout = nn.Dropout(0.15)
+        self.dropout = nn.Dropout(0.0)  # disabled: residuals are small-scale, dropout is harmful
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_bn(x)
         h = torch.relu(self.bn1(self.fc1(x)))
-        h = self.dropout(h)
         h = torch.relu(self.bn2(self.fc2(h)))
-        h = self.dropout(h)
         h = torch.relu(self.bn3(self.fc3(h)))
         return self.head(h).squeeze(-1)
 
@@ -44,7 +42,7 @@ class NnResidualModel:
 
     def __init__(self):
         self.lr = float(os.environ.get("MEOW_NNR_LR", "3e-4"))
-        self.epochs = int(os.environ.get("MEOW_NNR_EPOCHS", "15"))
+        self.epochs = int(os.environ.get("MEOW_NNR_EPOCHS", "30"))
         self.batch_size = int(os.environ.get("MEOW_NNR_BATCH_SIZE", "1024"))
         self.hidden = int(os.environ.get("MEOW_NNR_HIDDEN", "64"))
         self.weight_decay = float(os.environ.get("MEOW_NNR_WD", "1e-6"))
