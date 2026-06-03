@@ -44,13 +44,13 @@ class LGBModel:
     def __init__(self):
         self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
-        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
+        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.03"))
+        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "400"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
-        self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
+        self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "0.1"))
         self.pearson_obj = os.environ.get("MEOW_LGB_PEARSON_OBJ", "0") != "0"
         self.exclude_families = {
             f.strip()
