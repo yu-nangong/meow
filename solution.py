@@ -18,12 +18,13 @@ from models.elasticnet_model import ElasticNetModel
 from models.lgb_model import LGBModel
 from models.panel_seasonality import PanelSeasonalityResidual
 from models.blend_model import BlendModel
+from models.rank_blend_model import RankBlendModel
 from models.lag_mlp_sequence_model import LagMLPSequenceModel
 from models.deeplob_model import DeepLOBModel
 from models.nn_residual import NnResidualModel
 
 from models.pearson_nn import PearsonNNModel
-MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
+MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "rank_blend").strip().lower()
 TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
@@ -149,6 +150,8 @@ def _fit_forecast_mean_shrink(
 
 
 def _create_base_model():
+    if MODEL_TYPE == "rank_blend":
+        return RankBlendModel()
     if MODEL_TYPE == "blend":
         return BlendModel()
     if MODEL_TYPE == "lgb":
