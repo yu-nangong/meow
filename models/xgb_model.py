@@ -17,7 +17,7 @@ class XGBModel:
         self.max_rows = int(os.environ.get("MEOW_XGB_MAX_ROWS", "500000"))
         self.max_depth = int(os.environ.get("MEOW_XGB_MAX_DEPTH", "6"))
         self.learning_rate = float(os.environ.get("MEOW_XGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "200"))
+        self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "201"))
         self.subsample = float(os.environ.get("MEOW_XGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_XGB_COLSAMPLE_BYTREE", "0.8"))
         self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "reg:squarederror").strip()
