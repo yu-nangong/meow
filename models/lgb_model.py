@@ -11,7 +11,7 @@ class LGBModel:
     def __init__(self):
         self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
         self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
-        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
+        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.03"))
         self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
