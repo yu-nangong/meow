@@ -103,6 +103,16 @@ class MeowFeatureGenerator(object):
             "high_gap_cs",
             "trade_buy_high_gap_cs",
             "trade_sell_high_gap_cs",
+            "trade_buy_low_gap_cs",
+            "trade_sell_low_gap_cs",
+            "add_buy_high_gap_cs",
+            "add_buy_low_gap_cs",
+            "add_sell_high_gap_cs",
+            "add_sell_low_gap_cs",
+            "cxl_buy_high_gap_cs",
+            "cxl_buy_low_gap_cs",
+            "cxl_sell_high_gap_cs",
+            "cxl_sell_low_gap_cs",
             "trade_count_imb",
             "add_count_imb",
             "cxl_count_imb",
@@ -123,6 +133,16 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "trade_buy_low_gap",
+            "trade_sell_low_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
             "vwad_center_dev",
             "trade_high_center_gap",
             "trade_high_skew",
@@ -177,6 +197,16 @@ class MeowFeatureGenerator(object):
             "high_minus_low_rank_cs",
             "trade_buy_high_gap_rank_cs",
             "trade_sell_high_gap_rank_cs",
+            "trade_buy_low_gap_rank_cs",
+            "trade_sell_low_gap_rank_cs",
+            "add_buy_high_gap_rank_cs",
+            "add_buy_low_gap_rank_cs",
+            "add_sell_high_gap_rank_cs",
+            "add_sell_low_gap_rank_cs",
+            "cxl_buy_high_gap_rank_cs",
+            "cxl_buy_low_gap_rank_cs",
+            "cxl_sell_high_gap_rank_cs",
+            "cxl_sell_low_gap_rank_cs",
             "vwad_center_dev_rank_cs",
             "trade_high_center_gap_rank_cs",
             "trade_high_skew_rank_cs",
@@ -392,6 +422,16 @@ class MeowFeatureGenerator(object):
         features["high_minus_low"] = (df["high"] - df["low"]) / (df["midpx"] + eps)
         features["trade_buy_high_gap"] = (df["tradeBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
         features["trade_sell_high_gap"] = (df["tradeSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["trade_buy_low_gap"] = (df["midpx"] - df["tradeBuyLow"]) / (df["midpx"] + eps)
+        features["trade_sell_low_gap"] = (df["midpx"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+        features["add_buy_high_gap"] = (df["addBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_buy_low_gap"] = (df["midpx"] - df["addBuyLow"]) / (df["midpx"] + eps)
+        features["add_sell_high_gap"] = (df["addSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["add_sell_low_gap"] = (df["midpx"] - df["addSellLow"]) / (df["midpx"] + eps)
+        features["cxl_buy_high_gap"] = (df["cxlBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_buy_low_gap"] = (df["midpx"] - df["cxlBuyLow"]) / (df["midpx"] + eps)
+        features["cxl_sell_high_gap"] = (df["cxlSellHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["cxl_sell_low_gap"] = (df["midpx"] - df["cxlSellLow"]) / (df["midpx"] + eps)
         features["vwad_center_dev"] = 0.5 * (features["buy_vwad_dev"] + features["sell_vwad_dev"])
         features["trade_high_center_gap"] = 0.5 * (
             features["trade_buy_high_gap"] + features["trade_sell_high_gap"]
@@ -531,6 +571,16 @@ class MeowFeatureGenerator(object):
             "high_gap",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "trade_buy_low_gap",
+            "trade_sell_low_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
         ]
         cs_frame = base_df[cs_cols]
         cs_means = cs_frame.groupby([df["date"], df["interval"]], sort=False).transform("mean")
@@ -575,6 +625,16 @@ class MeowFeatureGenerator(object):
             "high_minus_low",
             "trade_buy_high_gap",
             "trade_sell_high_gap",
+            "trade_buy_low_gap",
+            "trade_sell_low_gap",
+            "add_buy_high_gap",
+            "add_buy_low_gap",
+            "add_sell_high_gap",
+            "add_sell_low_gap",
+            "cxl_buy_high_gap",
+            "cxl_buy_low_gap",
+            "cxl_sell_high_gap",
+            "cxl_sell_low_gap",
             "vwad_center_dev",
             "trade_high_center_gap",
             "trade_high_skew",
