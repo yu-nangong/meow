@@ -378,10 +378,10 @@ class MeowFeatureGenerator(object):
                 del xdf
                 continue
             symbols = xdf.index.get_level_values("symbol")
-            for sym, grp_idx in xdf.groupby(symbols, sort=False).groups.items():
-                n = len(grp_idx)
+            for sym, grp in xdf.groupby(symbols, sort=False):
+                n = len(grp)
                 for col in available:
-                    vals = xdf[col].iloc[grp_idx].to_numpy(dtype=np.float64, copy=False)
+                    vals = grp[col].to_numpy(dtype=np.float64, copy=False)
                     sym_sum[sym][col] += np.nansum(vals)
                     sym_sumsq[sym][col] += np.nansum(vals * vals)
                     sym_count[sym][col] += int(np.isfinite(vals).sum())
