@@ -9,10 +9,10 @@ import lightgbm as lgb
 
 class LGBModel:
     def __init__(self):
-        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "800000"))
-        self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "31"))
-        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.05"))
-        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "200"))
+        self.max_rows = int(os.environ.get("MEOW_LGB_MAX_ROWS", "1000000"))
+        self.num_leaves = int(os.environ.get("MEOW_LGB_NUM_LEAVES", "63"))
+        self.learning_rate = float(os.environ.get("MEOW_LGB_LEARNING_RATE", "0.03"))
+        self.n_estimators = int(os.environ.get("MEOW_LGB_N_ESTIMATORS", "300"))
         self.extra_trees = os.environ.get("MEOW_LGB_EXTRA_TREES", "0") != "0"
         self.subsample = float(os.environ.get("MEOW_LGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
@@ -20,25 +20,9 @@ class LGBModel:
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
         # Keep tree inputs narrower than ridge by default; the explicit time-gated
         # interaction families help the linear model more than the tree blend arm.
-        self.exclude_families = {
-            f.strip()
-            for f in os.environ.get(
-                "MEOW_LGB_EXCLUDE_FAMILIES",
-                "cs,time_interaction,u_interaction,time_sq_interaction,u_sq_interaction",
-            ).split(",")
-            if f.strip()
-        }
-        # Prune only the densest price-like raw-level rank columns by default.
-        # Keep queue/flow level ranks and all z-scores available to the tree arm.
-        self.exclude_patterns = tuple(
-            pattern.strip()
-            for pattern in os.environ.get(
-                "MEOW_LGB_EXCLUDE_PATTERNS",
-                "midpx_level_rank_cs,lastpx_level_rank_cs,high_level_rank_cs,"
-                "low_level_rank_cs,open_level_rank_cs,bid0_level_rank_cs,ask0_level_rank_cs",
-            ).split(",")
-            if pattern.strip()
-        )
+        # LGB-only: see ALL features — no exclusions
+        self.exclude_families = set()
+        self.exclude_patterns = ()
         self._X_reservoir = None
         self._y_reservoir = None
         self._n_accumulated = 0
