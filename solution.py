@@ -37,6 +37,8 @@ SEQ_BLEND_WEIGHT = float(os.environ.get("MEOW_SEQ_BLEND_WEIGHT", "0.3"))
 SEQ_MODEL_TYPE = os.environ.get("MEOW_SEQ_MODEL_TYPE", "mlp").strip().lower()
 NN_RESIDUAL_ENABLED = os.environ.get("MEOW_NN_RESIDUAL", "0") != "0"
 NN_RESIDUAL_BLEND_WEIGHT = float(os.environ.get("MEOW_NN_RESIDUAL_BLEND", "0.25"))
+TARGET_STANDARDIZE = os.environ.get("MEOW_TARGET_STANDARDIZE", "1") != "0"
+TARGET_STANDARDIZE_MIN_STD = 1e-8
 FORECAST_CS_CENTER_STAT = os.environ.get("MEOW_FORECAST_CS_CENTER_STAT", "median").strip().lower()
 
 
@@ -66,6 +68,52 @@ def _resolve_h5dir(h5dir: Optional[str]) -> str:
     if h5dir:
         return verify_data_dir(h5dir)
     return verify_data_dir()
+
+
+def _compute_sym_target_stats(h5dir: str, train_dates: List[int]) -> tuple:
+    """Compute per-symbol mean/std of fret12 across all training data."""
+    sym_n = {}
+    sym_sum = {}
+    sym_sq = {}
+    for day in train_dates:
+        path = os.path.join(h5dir, f"{day}.h5")
+        df = pd.read_hdf(path, columns=["symbol", "fret12"])
+        for sym, grp in df.groupby("symbol", sort=False):
+            y = grp["fret12"].to_numpy(dtype=np.float64)
+            y = y[np.isfinite(y)]
+            if len(y) == 0:
+                continue
+            sym_n[sym] = sym_n.get(sym, 0) + len(y)
+            sym_sum[sym] = sym_sum.get(sym, 0.0) + float(y.sum())
+            sym_sq[sym] = sym_sq.get(sym, 0.0) + float((y * y).sum())
+        del df
+    means = {}
+    stds = {}
+    for sym in sym_n:
+        cnt = sym_n[sym]
+        mean = sym_sum[sym] / cnt
+        var = max(sym_sq[sym] / cnt - mean * mean, TARGET_STANDARDIZE_MIN_STD)
+        means[sym] = mean
+        stds[sym] = float(np.sqrt(var))
+    return means, stds
+
+
+def _zscore_target(ydf: pd.DataFrame, means: dict, stds: dict) -> pd.DataFrame:
+    """Return ydf with fret12 replaced by per-symbol z-score."""
+    ydf = ydf.copy()
+    syms = ydf.index.get_level_values("symbol")
+    y = ydf["fret12"].to_numpy(dtype=np.float64, copy=False)
+    mean_arr = np.array([means.get(s, 0.0) for s in syms], dtype=np.float64)
+    std_arr = np.array([stds.get(s, 1.0) for s in syms], dtype=np.float64)
+    ydf["fret12"] = (y - mean_arr) / std_arr
+    return ydf
+
+
+def _unstd_preds(pred: np.ndarray, syms: np.ndarray, means: dict, stds: dict) -> np.ndarray:
+    """Un-standardize predictions: pred_z * std_sym + mean_sym."""
+    mean_arr = np.array([means.get(s, 0.0) for s in syms], dtype=np.float64)
+    std_arr = np.array([stds.get(s, 1.0) for s in syms], dtype=np.float64)
+    return pred.astype(np.float64) * std_arr + mean_arr
 
 
 def _group_forecast_stats(ydf: pd.DataFrame, pred: np.ndarray) -> pd.DataFrame:
@@ -166,11 +214,17 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
     feat_gen = MeowFeatureGenerator(cacheDir=None)
     model = _create_base_model()
     model.reset()
+    sym_means = {}
+    sym_stds = {}
+    if TARGET_STANDARDIZE:
+        sym_means, sym_stds = _compute_sym_target_stats(h5dir, train_dates)
 
     for chunk in _chunk_dates(train_dates, N_CHUNKS):
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
+        if TARGET_STANDARDIZE:
+            ydf = _zscore_target(ydf, sym_means, sym_stds)
         y_train = ydf.copy()
         y_train.loc[:, "fret12"] = _train_target_array(ydf)
         model.partial_fit(xdf, y_train)
@@ -184,6 +238,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
         raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
         xdf, ydf = feat_gen.genFeatures(raw)
         del raw
+        if TARGET_STANDARDIZE:
+            ydf = _zscore_target(ydf, sym_means, sym_stds)
         base_pred = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
         resid = _train_target_array(ydf) - base_pred
         interval_residual.partial_fit(xdf, resid, base_pred=base_pred)
@@ -196,6 +252,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
+            if TARGET_STANDARDIZE:
+                ydf = _zscore_target(ydf, sym_means, sym_stds)
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
@@ -210,6 +268,8 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             raw = pd.concat(list(iter_days(h5dir, chunk)), ignore_index=True)
             xdf, ydf = feat_gen.genFeatures(raw)
             del raw
+            if TARGET_STANDARDIZE:
+                ydf = _zscore_target(ydf, sym_means, sym_stds)
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             forecast = forecast + panel_residual.predict(ydf)
@@ -243,7 +303,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             seq_pred = np.zeros(len(raw), dtype=np.float64)
         xdf, ydf = feat_gen.genFeatures(raw)
         ydf = ydf.copy()
-        forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
+        forecast = model.predict(xdf)
         forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
         forecast = forecast + panel_residual.predict(ydf)
         if nn_residual is not None:
@@ -252,6 +312,10 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             nn_resid = np.zeros(len(raw), dtype=np.float64)
         forecast = forecast + NN_RESIDUAL_BLEND_WEIGHT * nn_resid
         forecast = (1.0 - SEQ_BLEND_WEIGHT) * forecast + SEQ_BLEND_WEIGHT * seq_pred
+        if TARGET_STANDARDIZE:
+            syms = ydf.index.get_level_values("symbol").to_numpy()
+            forecast = _unstd_preds(forecast, syms, sym_means, sym_stds)
+        forecast = _postprocess_forecast(ydf, forecast, forecast_cs_mean_shrink)
         ydf.loc[:, "forecast"] = forecast
         del raw, xdf
         y_parts.append(ydf["fret12"].to_numpy())
