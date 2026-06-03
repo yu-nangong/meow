@@ -6,6 +6,26 @@ import os
 import numpy as np
 import lightgbm as lgb
 
+def _pearson_objective(preds, train_data):
+    """Custom LightGBM objective that minimizes -Pearson correlation.
+
+    Gradient: d(-r)/dp_i = [r*(sigma_y/sigma_p)*(p_i-pbar) - (y_i-ybar)] / (n*sigma_p*sigma_y)
+    Hessian: approx 1/(n*sigma_p^2)
+    """
+    y = train_data.get_label()
+    n = len(y)
+    if n < 2:
+        return np.zeros_like(preds), np.ones_like(preds)
+    pbar = np.mean(preds)
+    ybar = np.mean(y)
+    sigma_p = np.std(preds) + 1e-8
+    sigma_y = np.std(y) + 1e-8
+    r = np.mean((preds - pbar) * (y - ybar)) / (sigma_p * sigma_y)
+    denom = n * sigma_p * sigma_y
+    grad = (r * (sigma_y / sigma_p) * (preds - pbar) - (y - ybar)) / denom
+    hess = np.full_like(grad, 1.0 / (n * sigma_p * sigma_p))
+    return grad, hess
+
 
 class LGBModel:
     def __init__(self):
@@ -18,6 +38,7 @@ class LGBModel:
         self.colsample_bytree = float(os.environ.get("MEOW_LGB_COLSAMPLE_BYTREE", "0.8"))
         self.min_child_samples = int(os.environ.get("MEOW_LGB_MIN_CHILD_SAMPLES", "100"))
         self.reg_lambda = float(os.environ.get("MEOW_LGB_REG_LAMBDA", "1.0"))
+        self.pearson_objective = os.environ.get("MEOW_LGB_PEARSON_OBJ", "1") != "0"
         # Keep tree inputs narrower than ridge by default; the explicit time-gated
         # interaction families help the linear model more than the tree blend arm.
         self.exclude_families = {
@@ -99,12 +120,23 @@ class LGBModel:
             random_state=42,
             n_jobs=1,  # single-thread to avoid grader memory pressure
         )
+        if self.pearson_objective:
+            params["objective"] = "regression"
         train_data = lgb.Dataset(self._X_reservoir, label=self._y_reservoir, free_raw_data=False)
-        self._model = lgb.train(
-            params,
-            train_data,
-            num_boost_round=self.n_estimators,
-        )
+        if self.pearson_objective:
+            self._model = lgb.train(
+                params,
+                train_data,
+                num_boost_round=self.n_estimators,
+                fobj=_pearson_objective,
+                feval=lambda p, d: ("pearson", np.corrcoef(p, d.get_label())[0, 1], True),
+            )
+        else:
+            self._model = lgb.train(
+                params,
+                train_data,
+                num_boost_round=self.n_estimators,
+            )
 
     def predict(self, xdf):
         if self._model is None or self._feature_names is None:
