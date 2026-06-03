@@ -21,6 +21,7 @@ class XGBModel:
         self.subsample = float(os.environ.get("MEOW_XGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_XGB_COLSAMPLE_BYTREE", "0.8"))
         self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "reg:squarederror").strip()
+        self.num_parallel_tree = int(os.environ.get("MEOW_XGB_NUM_PARALLEL_TREE", "2"))
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
@@ -125,6 +126,7 @@ class XGBModel:
             objective=self.objective,
             tree_method="hist",
             random_state=42,
+            num_parallel_tree=self.num_parallel_tree,
             nthread=1,
             verbosity=0,
         )
