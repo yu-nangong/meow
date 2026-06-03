@@ -91,6 +91,9 @@ class MeowFeatureGenerator(object):
             "micro_dev_x_ret6",
             "ob0_x_ob19",
             "trade_imb_x_ret1",
+            "trade_range_buy",
+            "trade_range_sell",
+            "order_flow_toxicity",
             "ret12_resid",
             "trade_imb_cs",
             "micro_dev_cs",
@@ -243,6 +246,9 @@ class MeowFeatureGenerator(object):
             "market_trade_count_share_std",
             "market_depth_pressure_04_std",
             "trade_imb_x_ret1_rank_cs",
+            "trade_range_buy_rank_cs",
+            "trade_range_sell_rank_cs",
+            "order_flow_toxicity_rank_cs",
             "flow_imb_x_depth_pressure_04_rank_cs",
             "high_minus_low_x_ret1_rank_cs",
             "micro_dev_x_trade_imb_rank_cs",
@@ -439,6 +445,11 @@ class MeowFeatureGenerator(object):
         base_df.loc[:, "ob0_x_ob19"] = base_df["ob_imb0"] * base_df["ob_imb19"]
         base_df.loc[:, "trade_imb_x_ret1"] = base_df["trade_imb"] * base_df["ret1"]
 
+        # === Order flow toxicity and price dispersion features ===
+        base_df.loc[:, "trade_range_buy"] = (df["tradeBuyHigh"] - df["tradeBuyLow"]) / (df["midpx"] + eps)
+        base_df.loc[:, "trade_range_sell"] = (df["tradeSellHigh"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+        base_df.loc[:, "order_flow_toxicity"] = (df["cxlBuyQty"] + df["cxlSellQty"]) / (df["tradeBuyQty"] + df["tradeSellQty"] + eps)
+
         # === Raw-level cross-sectional features from HDF5 columns ===
         # Capture absolute magnitude/scale information orthogonal to existing ratio features.
         # Type "rank": percentile rank within (date, interval) -> _rank_cs
@@ -550,6 +561,9 @@ class MeowFeatureGenerator(object):
             "trade_high_center_gap",
             "trade_high_skew",
             "high_vs_trade_high_gap",
+            "trade_range_buy",
+            "trade_range_sell",
+            "order_flow_toxicity",
         ]
         rank_df = base_df[rank_cols].groupby([df["date"], df["interval"]], sort=False).rank(pct=True) - 0.5
         rank_df.columns = [f"{col}_rank_cs" for col in rank_cols]
