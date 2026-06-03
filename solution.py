@@ -24,7 +24,7 @@ from models.nn_residual import NnResidualModel
 
 from models.pearson_nn import PearsonNNModel
 MODEL_TYPE = os.environ.get("MEOW_MODEL_TYPE", "blend").strip().lower()
-TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "0") != "0"
+TRAIN_ON_INTERVAL_DEMEANED_TARGET = os.environ.get("MEOW_TRAIN_ON_INTERVAL_DEMEANED_TARGET", "1") != "0"
 
 N_CHUNKS = int(os.environ.get("MEOW_N_CHUNKS", "8"))
 FORECAST_CS_MEAN_SHRINK = float(os.environ.get("MEOW_FORECAST_CS_MEAN_SHRINK", "0.0"))
@@ -198,7 +198,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             del raw
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
-            resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
+            resid = _train_target_array(ydf) - forecast
             panel_residual.partial_fit(ydf, resid)
             del xdf, ydf, forecast, resid
         panel_residual.finalize_fit()
@@ -213,7 +213,7 @@ def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
             forecast = _postprocess_forecast(ydf, model.predict(xdf), forecast_cs_mean_shrink)
             forecast = forecast + interval_residual.predict(xdf, base_pred=forecast)
             forecast = forecast + panel_residual.predict(ydf)
-            resid = ydf["fret12"].to_numpy(dtype=np.float64, copy=False) - forecast
+            resid = _train_target_array(ydf) - forecast
             nn_residual.partial_fit(xdf, resid)
             del xdf, ydf, forecast, resid
         nn_residual.finalize_fit()
