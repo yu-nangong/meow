@@ -410,6 +410,14 @@ class MeowFeatureGenerator(object):
             + eps
         )
 
+        # New microstructure features: resilience, pressure, slippage
+        features["bid_resilience"] = (df["addBuyQty"] - df["cxlBuyQty"]) / (df["bsize0"] + eps)
+        features["ask_resilience"] = (df["addSellQty"] - df["cxlSellQty"]) / (df["asize0"] + eps)
+        features["trade_buy_pressure"] = df["tradeBuyQty"] / (df["bsize0"] + eps)
+        features["trade_sell_pressure"] = df["tradeSellQty"] / (df["asize0"] + eps)
+        features["buy_slippage"] = (df["tradeBuyHigh"] - df["midpx"]) / (df["midpx"] + eps)
+        features["sell_slippage"] = (df["midpx"] - df["tradeSellLow"]) / (df["midpx"] + eps)
+
         features["ret1"] = sym_day["midpx"].pct_change(1)
         features["ret3"] = sym_day["midpx"].pct_change(3)
         features["ret6"] = sym_day["midpx"].pct_change(6)
