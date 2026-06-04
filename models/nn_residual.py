@@ -16,7 +16,7 @@ import torch.nn as nn
 
 
 class ResidualNet(nn.Module):
-    """Skip-connected MLP for residual correction."""
+    """GELU MLP with skip connection for residual correction."""
     def __init__(self, n_features: int, hidden: int = 64):
         super().__init__()
         self.input_bn = nn.BatchNorm1d(n_features)
@@ -28,15 +28,20 @@ class ResidualNet(nn.Module):
         self.bn3 = nn.BatchNorm1d(hidden // 4)
         self.head = nn.Linear(hidden // 4, 1)
         self.dropout = nn.Dropout(0.15)
+        # Skip: linear projection from normalized input to residual output
+        self.skip = nn.Linear(n_features, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.input_bn(x)
-        h = torch.relu(self.bn1(self.fc1(x)))
+        x_norm = self.input_bn(x)
+        h = torch.nn.functional.gelu(self.bn1(self.fc1(x_norm)))
         h = self.dropout(h)
-        h = torch.relu(self.bn2(self.fc2(h)))
+        h = torch.nn.functional.gelu(self.bn2(self.fc2(h)))
         h = self.dropout(h)
-        h = torch.relu(self.bn3(self.fc3(h)))
-        return self.head(h).squeeze(-1)
+        h = torch.nn.functional.gelu(self.bn3(self.fc3(h)))
+        h = self.dropout(h)
+        deep = self.head(h).squeeze(-1)
+        skip = self.skip(x_norm).squeeze(-1)
+        return deep + skip
 
 
 class NnResidualModel:
