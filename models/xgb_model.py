@@ -20,7 +20,7 @@ class XGBModel:
         self.n_estimators = int(os.environ.get("MEOW_XGB_N_ESTIMATORS", "200"))
         self.subsample = float(os.environ.get("MEOW_XGB_SUBSAMPLE", "0.8"))
         self.colsample_bytree = float(os.environ.get("MEOW_XGB_COLSAMPLE_BYTREE", "0.8"))
-        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "reg:squarederror").strip()
+        self.objective = os.environ.get("MEOW_XGB_OBJECTIVE", "rank:pairwise").strip()
         self.exclude_families = {
             f.strip()
             for f in os.environ.get(
@@ -123,6 +123,7 @@ class XGBModel:
             subsample=self.subsample,
             colsample_bytree=self.colsample_bytree,
             objective=self.objective,
+            reg_lambda=float(os.environ.get("MEOW_XGB_REG_LAMBDA", "0.0")),
             tree_method="hist",
             random_state=42,
             nthread=1,
