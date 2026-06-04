@@ -161,6 +161,11 @@ def _create_base_model():
 
 
 def train_and_evaluate(h5dir: Optional[str] = None) -> Dict[str, float]:
+    os.environ.setdefault("MEOW_XGB_OBJECTIVE", "rank:pairwise")
+    # Disable residual correctors — three-way blend is self-contained
+    os.environ.setdefault("MEOW_NN_RESIDUAL", "0")
+    os.environ.setdefault("MEOW_ENABLE_INTERVAL_RESIDUAL", "0")
+    os.environ.setdefault("MEOW_PANEL_BLEND", "0")
     h5dir = _resolve_h5dir(h5dir)
     train_dates, test_dates = train_test_dates()
     feat_gen = MeowFeatureGenerator(cacheDir=None)
